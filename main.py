@@ -27,22 +27,18 @@ def safe(fn, name, default=None):
 
 def scan_market():
     log.info(f"=== SCAN START: {len(COINS)} coins ===")
-
     news_ok = safe(check_high_impact_now, "check_high_impact_now", False)
     if news_ok:
         send_message("⚠️ <b>Красная новость по крипте!</b> Пропускаю сканирование.")
         return
-
     prices = safe(lambda: get_all_prices(COINS), "get_all_prices", {})
     log.info(f"Got {len(prices)} prices")
-
     closed = safe(lambda: check_positions(prices), "check_positions", [])
     for pos in closed:
         p = load_portfolio()
         send_message(format_position_closed(pos, p["deposit"]))
     if closed:
         log.info(f"Closed {len(closed)} positions")
-
     signals = []
     for idx, symbol in enumerate(COINS):
         try:
@@ -58,9 +54,7 @@ def scan_market():
                 log.info(f"SIGNAL FOUND: {symbol} {signal['signal']} conf={signal['confidence']}")
         except Exception as e:
             log.error(f"{symbol}: {e}")
-
     log.info(f"=== SCAN DONE. {len(signals)} signals found ===")
-
     for symbol, signal, candles, key in signals[:3]:
         try:
             port = load_portfolio()
@@ -96,9 +90,11 @@ def main():
     if not test_connection():
         log.error("Cannot connect to Telegram!")
         return
-
     port = load_portfolio()
     send_message(f"🤖 <b>Бот перезапущен!</b>\nДепозит: ${port['deposit']:.2f}")
+
+    log.info("Sending test digest for Polymarket verification...")
+    safe(lambda: send_digest("pacific_morning"), "test_digest")
 
     schedule.every(SCAN_INTERVAL).seconds.do(scan_market)
     schedule.every().day.at(SCHEDULE_UTC["pacific_morning"]).do(lambda: send_digest("pacific_morning"))
