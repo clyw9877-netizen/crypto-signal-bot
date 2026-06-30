@@ -32,9 +32,8 @@ def draw_signal_chart(symbol, candles, signal, save_path=None):
     ax.hlines(current_price, 0, n, colors='#ffffff', linewidths=0.8, alpha=0.3)
     rr = signal.get('rr', 0)
     rsi = signal.get('rsi', 50)
-    reasons = signal.get('reasons', [])
-    dir_text = "LONG" if direction == 'long' else "SHORT"
-    info = "Signal: " + symbol + " " + dir_text + "\nConfidence: " + str(confidence) + "%\nEntry: $" + str(round(entry,2)) + "\nSL: $" + str(round(sl,2)) + "\nTP: $" + str(round(tp,2)) + "\nRR: 1:" + str(round(rr,1)) + "\nRSI: " + str(round(rsi))
+    dir_text = "ЛОНГ" if direction == 'long' else "ШОРТ"
+    info = "Сигнал: " + symbol + " " + dir_text + "\nУверенность: " + str(confidence) + "%\nВход: $" + str(round(entry,2)) + "\nSL: $" + str(round(sl,2)) + "\nTP: $" + str(round(tp,2)) + "\nRR: 1:" + str(round(rr,1)) + "\nRSI: " + str(round(rsi))
     props = dict(boxstyle='round', facecolor='#0a1520', alpha=0.95, edgecolor='#aa66ff', linewidth=1.5)
     ax.text(2, ax.get_ylim()[1] if ax.get_ylim()[1] else current_price*1.02, info, fontsize=9, color='#c0d8f0', verticalalignment='top', bbox=props, fontfamily='monospace', zorder=10)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x,p: '$'+'{:,.0f}'.format(x)))
@@ -43,7 +42,7 @@ def draw_signal_chart(symbol, candles, signal, save_path=None):
     ax.set_xlim(-1, n+8)
     ax.grid(True, alpha=0.05, color='#ffffff', linewidth=0.5)
     for spine in ax.spines.values(): spine.set_color('#1a2535')
-    ax.set_title(symbol + ' 1H BingX | Confidence: ' + str(confidence) + '% | ' + dir_text, color='#c0d8f0', fontsize=11, fontweight='bold', pad=10)
+    ax.set_title(symbol + ' · 1ч · BingX | Уверенность: ' + str(confidence) + '% | ' + dir_text, color='#c0d8f0', fontsize=11, fontweight='bold', pad=10)
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, dpi=130, bbox_inches='tight', facecolor='#0d0f1a')
