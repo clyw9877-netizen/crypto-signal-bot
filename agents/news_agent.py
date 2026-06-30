@@ -1,5 +1,6 @@
 import requests
 from datetime import datetime, date
+from dateutil import parser as dateparser
 from typing import List, Dict
 
 TIMEOUT = 6
@@ -19,29 +20,39 @@ def get_crypto_news() -> List[Dict]:
         print("get_crypto_news error:", e)
         return []
 
+def _parse_event_date(raw_date: str):
+    try:
+        return dateparser.parse(raw_date)
+    except Exception:
+        return None
+
 def get_forex_factory_events() -> List[Dict]:
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     raw = None
     for url in FF_URLS:
         try:
             r = requests.get(url, timeout=TIMEOUT, headers=headers)
-            print(f"FF fetch {url} -> status {r.status_code}, len {len(r.text)}")
             if r.status_code == 200 and r.text.strip().startswith("["):
                 raw = r.json()
                 break
-            else:
-                print(f"FF response not JSON array. First 200 chars: {r.text[:200]}")
         except Exception as e:
             print(f"FF fetch error {url}: {e}")
     if raw is None:
         return []
     try:
-        today = date.today().strftime("%m-%d-%Y")
+        today_d = date.today()
         events = []
+        sample_dates = []
         for event in raw:
-            if event.get("date","") == today and event.get("impact","") in ["High","Medium"]:
+            raw_date = event.get("date", "")
+            if len(sample_dates) < 3:
+                sample_dates.append(raw_date)
+            parsed = _parse_event_date(raw_date)
+            if parsed is None:
+                continue
+            if parsed.date() == today_d and event.get("impact","") in ["High","Medium"]:
                 events.append({"time":event.get("time",""),"currency":event.get("country",""),"title":event.get("title",""),"impact":event.get("impact","")})
-        print(f"FF events parsed: {len(events)} (total entries this week: {len(raw)})")
+        print(f"FF sample raw dates: {sample_dates} | today: {today_d} | matched: {len(events)} of {len(raw)}")
         return sorted(events, key=lambda x: x["time"])
     except Exception as e:
         print("FF parse error:", e)
@@ -91,7 +102,7 @@ def format_morning_digest(prices, events, news) -> str:
         for e in events[:5]:
             text += ("RED " if e["impact"]=="High" else "YEL ") + e["time"] + " " + e["currency"] + " - " + e["title"] + "\n"
     else:
-        text += "No major events found today (or calendar source unavailable).\n"
+        text += "No major events found today.\n"
     if news:
         text += "\nTop news:\n"
         for n in news[:3]:
