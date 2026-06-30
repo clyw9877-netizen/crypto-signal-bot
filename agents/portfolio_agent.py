@@ -70,16 +70,37 @@ def check_positions(current_prices: Dict) -> List[Dict]:
     return closed
 
 def format_position_opened(pos: Dict) -> str:
-    return "Position opened #" + str(pos["id"]) + "\n" + pos["symbol"] + " " + pos["direction"].upper() + "\nEntry: $" + str(round(pos["entry_price"],2)) + "\nSL: $" + str(round(pos["sl"],2)) + "\nTP: $" + str(round(pos["tp"],2)) + "\nLeverage: x" + str(pos["leverage"]) + "\nSize: $" + str(round(pos["size"],2)) + "\nConfidence: " + str(pos["confidence"]) + "%"
+    dir_text = "ЛОНГ 🟢" if pos["direction"] == "long" else "ШОРТ 🔴"
+    return (f"<b>✅ Позиция открыта #{pos['id']}</b>\n"
+            f"{pos['symbol']} {dir_text}\n"
+            f"Вход: ${pos['entry_price']:,.2f}\n"
+            f"SL: ${pos['sl']:,.2f}\n"
+            f"TP: ${pos['tp']:,.2f}\n"
+            f"Плечо: x{pos['leverage']}\n"
+            f"Размер позиции: ${pos['size']:,.2f}\n"
+            f"Уверенность: {pos['confidence']}%")
 
 def format_position_closed(pos: Dict, new_deposit: float) -> str:
     p = load_portfolio()
     wr = p["wins"]/p["total_trades"]*100 if p["total_trades"] > 0 else 0
-    result = "WIN" if pos["result"]=="win" else "LOSS"
-    return result + " Position #" + str(pos["id"]) + " closed\n" + pos["symbol"] + "\nClose: $" + str(round(pos.get("close_price",0),2)) + "\nP&L: $" + str(round(pos.get("net_pnl",0),2)) + "\nDeposit: $" + str(round(new_deposit,2)) + "\nWinrate: " + str(round(wr)) + "%"
+    result = "✅ ПРИБЫЛЬ" if pos["result"]=="win" else "❌ УБЫТОК"
+    trigger = "🎯 TP" if pos.get("hit_tp") else "🛑 SL"
+    return (f"<b>{result} — Сделка #{pos['id']} закрыта</b>\n"
+            f"{pos['symbol']}\n"
+            f"Сработал: {trigger} по цене ${pos.get('close_price',0):,.2f}\n"
+            f"Прибыль/убыток: ${pos.get('net_pnl',0):,.2f}\n"
+            f"Депозит сейчас: ${new_deposit:,.2f}\n"
+            f"Винрейт: {round(wr)}%")
 
 def get_portfolio_stats() -> str:
     p = load_portfolio()
     wr = p["wins"]/p["total_trades"]*100 if p["total_trades"] > 0 else 0
     growth = (p["deposit"]-p["start_deposit"])/p["start_deposit"]*100
-    return "Portfolio Stats\nStart: $" + str(round(p["start_deposit"],2)) + "\nNow: $" + str(round(p["deposit"],2)) + "\nGrowth: " + str(round(growth,1)) + "%\nWins: " + str(p["wins"]) + " Losses: " + str(p["losses"]) + "\nWinrate: " + str(round(wr)) + "%\nTotal P&L: $" + str(round(p["total_pnl"],2))
+    return (f"<b>📊 Статистика портфеля</b>\n"
+            f"Старт: ${p['start_deposit']:,.2f}\n"
+            f"Сейчас: ${p['deposit']:,.2f}\n"
+            f"Рост: {growth:+.1f}%\n"
+            f"Побед/Поражение: {p['wins']}/{p['losses']}\n"
+            f"Винрейт: {round(wr)}%\n"
+            f"Общий P&L: ${p['total_pnl']:,.2f}\n"
+            f"Открытых позиций: {len(p['open_positions'])}")
