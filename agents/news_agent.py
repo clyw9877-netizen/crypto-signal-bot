@@ -2,26 +2,30 @@ import requests
 from datetime import datetime, date
 from typing import List, Dict
 
+TIMEOUT = 6
+
 def get_crypto_news() -> List[Dict]:
     try:
-        r = requests.get("https://cryptopanic.com/api/v1/posts/", params={"auth_token":"free","public":"true","kind":"news","filter":"hot"}, timeout=10)
+        r = requests.get("https://cryptopanic.com/api/v1/posts/", params={"auth_token":"free","public":"true","kind":"news","filter":"hot"}, timeout=TIMEOUT)
         news = []
         for item in r.json().get("results", [])[:10]:
             news.append({"title":item.get("title",""),"source":item.get("source",{}).get("title",""),"votes_positive":item.get("votes",{}).get("positive",0),"currencies":[c["code"] for c in item.get("currencies",[])]})
         return news
-    except:
+    except Exception as e:
+        print("get_crypto_news error:", e)
         return []
 
 def get_forex_factory_events() -> List[Dict]:
     try:
-        r = requests.get("https://nfs.faireconomy.media/ff_calendar_thisweek.json", timeout=10)
+        r = requests.get("https://nfs.faireconomy.media/ff_calendar_thisweek.json", timeout=TIMEOUT)
         today = date.today().strftime("%m-%d-%Y")
         events = []
         for event in r.json():
             if event.get("date","") == today and event.get("impact","") in ["High","Medium"]:
                 events.append({"time":event.get("time",""),"currency":event.get("country",""),"title":event.get("title",""),"impact":event.get("impact","")})
         return sorted(events, key=lambda x: x["time"])
-    except:
+    except Exception as e:
+        print("get_forex_factory_events error:", e)
         return []
 
 def check_high_impact_now() -> bool:
@@ -36,23 +40,25 @@ def check_high_impact_now() -> bool:
                     return True
             except:
                 continue
-    except:
-        pass
+    except Exception as e:
+        print("check_high_impact_now error:", e)
     return False
 
 def get_fear_greed() -> Dict:
     try:
-        r = requests.get("https://api.alternative.me/fng/?limit=1", timeout=10)
+        r = requests.get("https://api.alternative.me/fng/?limit=1", timeout=TIMEOUT)
         d = r.json()["data"][0]
         return {"value":int(d["value"]),"classification":d["value_classification"]}
-    except:
+    except Exception as e:
+        print("get_fear_greed error:", e)
         return {"value":50,"classification":"Neutral"}
 
 def get_btc_dominance() -> float:
     try:
-        r = requests.get("https://api.coingecko.com/api/v3/global", timeout=10)
+        r = requests.get("https://api.coingecko.com/api/v3/global", timeout=TIMEOUT)
         return r.json()["data"]["market_cap_percentage"]["btc"]
-    except:
+    except Exception as e:
+        print("get_btc_dominance error:", e)
         return 0.0
 
 def format_morning_digest(prices, events, news) -> str:
