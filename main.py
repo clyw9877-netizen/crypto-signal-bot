@@ -74,12 +74,18 @@ def scan_market():
             log.error(f"Signal send {symbol}: {e}")
 
 def morning_digest():
-    log.info("Running morning digest...")
+    log.info("=== MORNING DIGEST START ===")
     prices = safe(lambda: get_all_prices(["BTC-USDT", "ETH-USDT", "SOL-USDT"]), "prices", {})
+    log.info(f"Digest prices: {prices}")
     events = safe(get_forex_factory_events, "events", [])
+    log.info(f"Digest events count: {len(events)}")
     news = safe(get_crypto_news, "news", [])
-    send_message(format_morning_digest(prices, events, news))
+    log.info(f"Digest news count: {len(news)}")
+    digest_text = format_morning_digest(prices, events, news)
+    ok = send_message(digest_text)
+    log.info(f"Digest sent: {ok}")
     send_message(get_portfolio_stats())
+    log.info("=== MORNING DIGEST DONE ===")
 
 def main():
     log.info("Starting Crypto Signal Bot...")
@@ -89,6 +95,10 @@ def main():
         return
     port = load_portfolio()
     send_message(f"Bot restarted! Deposit: ${port['deposit']:.2f}")
+
+    log.info("Sending startup digest to verify news pipeline...")
+    safe(morning_digest, "startup_morning_digest")
+
     schedule.every(SCAN_INTERVAL).seconds.do(scan_market)
     schedule.every().day.at(MORNING_DIGEST_TIME).do(morning_digest)
     scan_market()
