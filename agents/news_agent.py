@@ -2,6 +2,7 @@ import requests
 from datetime import datetime, date
 from dateutil import parser as dateparser
 from typing import List, Dict
+from agents.polymarket_agent import get_crypto_markets, format_polymarket_section
 
 TIMEOUT = 6
 FF_URLS = [
@@ -9,10 +10,8 @@ FF_URLS = [
     "https://cdn-nfs.faireconomy.media/ff_calendar_thisweek.json",
 ]
 
-# Только эти валюты/события реально двигают крипторынок (риск-аппетит, доллар, ставки ФРС)
 CRYPTO_RELEVANT_CURRENCIES = {"USD"}
 
-# Словарь ключевых слов события -> объяснение на русском
 EVENT_EXPLANATIONS = [
     (["fomc", "interest rate", "fed funds rate", "rate decision"],
      "Решение ФРС по ставке. Самое важное событие для всех рынков. Снижают ставку → деньги дешевлеют → обычно растёт крипта и акции. Повышают ставку → обычно падает рынок риска."),
@@ -40,7 +39,6 @@ def _explain_event(title: str) -> str:
     return ""
 
 def is_crypto_relevant(event: dict) -> bool:
-    # Только США-события, влияющие на доллар/риск-аппетит
     if event.get("currency") not in CRYPTO_RELEVANT_CURRENCIES:
         return False
     title = event.get("title", "").lower()
@@ -174,9 +172,18 @@ def format_digest(prices, events, news, title="Утренний дайджест
             text += f'{mark} {e["time"]} — <b>{e["title"]}</b>\n'
             if e.get("explanation"):
                 text += f"   <i>{e['explanation']}</i>\n"
-        text += f'\n<a href="https://www.forexfactory.com/calendar">🔗 Полный каленарь событий</a>\n\n'
+        text += f'\n<a href="https://www.forexfactory.com/calendar">🔗 Полный календарь событий</a>\n\n'
     else:
         text += f"Сегодня нет важных событий, влияющих на крипторынок.\n\n"
+
+    poly_markets = []
+    try:
+        poly_markets = get_crypto_markets()
+    except Exception as e:
+        print("Polymarket fetch error in digest:", e)
+    poly_section = format_polymarket_section(poly_markets)
+    if poly_section:
+        text += poly_section
 
     if news:
         text += "<b>📰 Новости:</b>\n"
