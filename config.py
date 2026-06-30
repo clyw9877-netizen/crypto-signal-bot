@@ -1,23 +1,16 @@
-# ============================================================
-# CRYPTO SIGNAL BOT - КОНФИГУРАЦИЯ
-# ============================================================
-
-# TELEGRAM
-TELEGRAM_TOKEN = "8824947957:AAHQpIY94l-Nf3ehfAfTIIg0FUF-HA7VpdY"
+# Crypto Signal Bot Config
+TELEGRAM_TOKEN = "8824947957:AAEmr0pByUHZ_LrM3QD4AQ4HPGub_WNzpoQ"
 TELEGRAM_CHANNEL = "-1004369003536"
 
-# BINGX API
 BINGX_API_KEY = ""
 BINGX_SECRET = ""
 
-# НАСТРОЙКИ
 VIRTUAL_DEPOSIT = 100.0
 RISK_PER_TRADE = 1.0
 SCAN_INTERVAL = 300
 PRICE_CHECK_INTERVAL = 10
 MORNING_DIGEST_TIME = "08:00"
 
-# МОНЕТЫ
 COINS = [
     "BTC-USDT", "ETH-USDT", "SOL-USDT", "BNB-USDT", "XRP-USDT",
     "DOGE-USDT", "ADA-USDT", "AVAX-USDT", "DOT-USDT", "MATIC-USDT",
@@ -26,7 +19,6 @@ COINS = [
     "SUI-USDT", "INJ-USDT", "WIF-USDT", "PEPE-USDT", "SHIB-USDT",
 ]
 
-# МАТРИЦА УВЕРЕННОСТИ
 CONFIDENCE_MATRIX = [
     (50, 60, 20, 5),
     (60, 70, 40, 10),
