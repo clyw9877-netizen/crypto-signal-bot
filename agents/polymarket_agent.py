@@ -10,7 +10,6 @@ TAG_CRYPTO = 21
 TAG_GEOPOLITICS = 100265
 TAG_FINANCE = 120
 
-# Приоритетные темы (выше в списке = важнее). Показываем только это.
 PRIORITY_PATTERNS = [
     "fed ", "fomc", "interest rate", "rate cut", "rate hike", "federal reserve",
     "bitcoin", "btc", "ethereum", "eth ", "solana", "xrp", "dogecoin",
@@ -19,10 +18,12 @@ PRIORITY_PATTERNS = [
     "russia", "ukraine", "putin", "war",
 ]
 
+# Мусор — краткосрочные микро-рынки и спорт/выборы
 EXCLUDE_PATTERNS = [
     "win on", "world cup", "vs.", " vs ", "premier league", "champions league",
     "fifa", "nba", "nfl", "tennis", "golf", "olympics", "election of", "prime minister",
     "mayor", "governor of", "senate race", "house race", "grammy", "oscar",
+    "up or down", "et$", " pm et", " am et", "satoshi move",
 ]
 
 def _parse_json_field(value):
@@ -68,10 +69,28 @@ def _fetch_by_tag(tag_id: int, limit: int = 100):
         print(f"Polymarket tag {tag_id} fetch error:", e)
     return []
 
+def _search_keyword(keyword: str, limit: int = 30):
+    """Дополнительный поиск по ключевому слову в вопросе, чтобы найти конкретные темы вроде "Fed rate cuts in 2026""""
+    try:
+        r = requests.get(
+            f"{GAMMA_BASE}/markets",
+            params={"active": "true", "closed": "false", "limit": limit, "order": "volume24hr", "ascending": "false"},
+            timeout=TIMEOUT
+        )
+        if r.status_code == 200:
+            all_m = r.json()
+            return [m for m in all_m if keyword.lower() in m.get("question", "").lower()]
+    except Exception as e:
+        print(f"Polymarket keyword search error '{keyword}':", e)
+    return []
+
 def get_crypto_markets(limit: int = 5) -> List[Dict]:
     all_markets = []
     for tag_id in [TAG_CRYPTO, TAG_FINANCE, TAG_GEOPOLITICS]:
         all_markets.extend(_fetch_by_tag(tag_id))
+    # Явно добавляем рынки про ставку ФРС, т.к. они могут быть вне этих тегов
+    all_markets.extend(_search_keyword("fed rate"))
+    all_markets.extend(_search_keyword("rate cuts in 2026"))
 
     seen_ids = set()
     scored = []
@@ -129,9 +148,8 @@ def get_crypto_markets(limit: int = 5) -> List[Dict]:
         final.append(m)
     return final
 
-# Полный перевод вопроса на русский через замену шаблонов
 REPLACEMENTS = [
-    (r"how many times will the fed cut (interest )?rates? in (\d{4})", r"Сколько раз ФРС снизит ставку в \2 году?"),
+    (r"how many (fed )?rate cuts in (\d{4})", r"Сколько раз ФРС снизит ставку в \2 году?"),
     (r"will the fed cut (interest )?rates?", "Снизит ли ФРС ставку?"),
     (r"will the fed raise (interest )?rates?", "Повысит ли ФРС ставку?"),
     (r"will bitcoin (reach|hit|exceed|surpass) \$?([\d,]+)k?", r"Достигнет ли Bitcoin \$\2?"),
@@ -154,7 +172,7 @@ def _translate_question(question: str) -> str:
                 return re.sub(pattern, replacement, q_lower, flags=re.IGNORECASE).capitalize()
         except Exception:
             continue
-    return question  # фолбэк на английский, если нет совпадения
+    return question
 
 def format_polymarket_section(markets: List[Dict], max_items: int = 5) -> str:
     if not markets:
