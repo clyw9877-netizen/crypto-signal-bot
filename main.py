@@ -11,14 +11,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger(__name__)
 sent_signals = set()
 
-# Railway runs in UTC. Schedule library uses the server's local time (UTC).
+# Railway runs in UTC.
 # Pacific Time (PDT, summer) = UTC-7  -> 08:00 PDT = 15:00 UTC, 22:00 PDT = 05:00 UTC (next day)
 # Moscow Time (MSK) = UTC+3          -> 08:00 MSK = 05:00 UTC, 22:00 MSK = 19:00 UTC
 SCHEDULE_UTC = {
-    "pacific_morning": "15:00",  # 08:00 Pacific
-    "pacific_evening": "05:00",  # 22:00 Pacific (prev day) -> shows as next day 05:00 UTC
-    "moscow_morning":  "05:00",  # 08:00 Moscow
-    "moscow_evening":  "19:00",  # 22:00 Moscow
+    "pacific_morning": "15:00",
+    "pacific_evening": "05:00",
+    "moscow_morning":  "05:00",
+    "moscow_evening":  "19:00",
 }
 
 def safe(fn, name, default=None):
@@ -28,16 +28,12 @@ def safe(fn, name, default=None):
         log.error(f"{name} failed: {e}")
         return default
 
-def format_coin_list() -> str:
-    lines = "\n".join(f"{i+1}. {c}" for i, c in enumerate(COINS))
-    return f"<b>📃 Список монет под наблюдением ({len(COINS)} шт.):</b>\n{lines}"
-
 def scan_market():
     log.info(f"=== SCAN START: {len(COINS)} coins ===")
 
     news_ok = safe(check_high_impact_now, "check_high_impact_now", False)
     if news_ok:
-        send_message("⚠️ <b>Красная новость!</b> Пропускаю сканирование.")
+        send_message("⚠️ <b>Красная новость по крипте!</b> Пропускаю сканирование.")
         return
 
     prices = safe(lambda: get_all_prices(COINS), "get_all_prices", {})
@@ -86,13 +82,13 @@ def scan_market():
 def send_digest(kind: str):
     log.info(f"=== DIGEST [{kind}] START ===")
     prices = safe(lambda: get_all_prices(["BTC-USDT", "ETH-USDT", "SOL-USDT"]), "prices", {})
-    events = safe(get_forex_factory_events, "events", [])
+    events = safe(lambda: get_forex_factory_events(crypto_only=True), "events", [])
     news = safe(get_crypto_news, "news", [])
     if "morning" in kind:
         text = format_morning_digest(prices, events, news)
     else:
         text = format_evening_digest(prices, events, news)
-    label = "🇺🇸 (твоё время)" if "pacific" in kind else "🇷🇺 (Москва)"
+    label = "🇺🇸 твоё время" if "pacific" in kind else "🇷🇺 Москва"
     send_message(f"{label}\n\n{text}")
     send_message(get_portfolio_stats())
     log.info(f"=== DIGEST [{kind}] DONE ===")
@@ -106,10 +102,6 @@ def main():
 
     port = load_portfolio()
     send_message(f"🤖 <b>Бот перезапущен!</b>\nДепозит: ${port['deposit']:.2f}")
-    send_message(format_coin_list())
-
-    log.info("Sending startup digest...")
-    safe(lambda: send_digest("pacific_morning"), "startup_digest")
 
     schedule.every(SCAN_INTERVAL).seconds.do(scan_market)
     schedule.every().day.at(SCHEDULE_UTC["pacific_morning"]).do(lambda: send_digest("pacific_morning"))
