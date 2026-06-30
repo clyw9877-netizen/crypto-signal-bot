@@ -11,9 +11,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger(__name__)
 sent_signals = set()
 
-# Railway runs in UTC.
-# Pacific Time (PDT, summer) = UTC-7  -> 08:00 PDT = 15:00 UTC, 22:00 PDT = 05:00 UTC (next day)
-# Moscow Time (MSK) = UTC+3          -> 08:00 MSK = 05:00 UTC, 22:00 MSK = 19:00 UTC
 SCHEDULE_UTC = {
     "pacific_morning": "15:00",
     "pacific_evening": "05:00",
@@ -102,6 +99,9 @@ def main():
 
     port = load_portfolio()
     send_message(f"🤖 <b>Бот перезапущен!</b>\nДепозит: ${port['deposit']:.2f}")
+
+    log.info("Sending test digest to verify Polymarket integration...")
+    safe(lambda: send_digest("pacific_morning"), "test_digest")
 
     schedule.every(SCAN_INTERVAL).seconds.do(scan_market)
     schedule.every().day.at(SCHEDULE_UTC["pacific_morning"]).do(lambda: send_digest("pacific_morning"))
