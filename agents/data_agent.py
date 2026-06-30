@@ -22,12 +22,16 @@ def get_candles(symbol: str, interval: str = "1h", limit: int = 100) -> List[Dic
         return []
 
 def get_price(symbol: str) -> Optional[float]:
+    # Use ticker endpoint (lastPrice) instead of /quote/price (can be stale/mark price)
     try:
-        url = BINGX_BASE + "/openApi/swap/v2/quote/price"
+        url = BINGX_BASE + "/openApi/swap/v2/quote/ticker"
         r = requests.get(url, params={"symbol": symbol}, timeout=TIMEOUT)
         data = r.json()
         if data.get("code") == 0:
-            return float(data["data"]["price"])
+            d = data["data"]
+            last_price = d.get("lastPrice")
+            if last_price is not None:
+                return float(last_price)
         return None
     except Exception as e:
         print("BingX price error:", symbol, e)
