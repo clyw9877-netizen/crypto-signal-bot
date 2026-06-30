@@ -5,8 +5,12 @@ from typing import List, Dict
 TIMEOUT = 6
 GAMMA_BASE = "https://gamma-api.polymarket.com"
 
-# Ключевые слова для поиска крипто-рынков на Polymarket
-CRYPTO_KEYWORDS = ["bitcoin", "btc", "ethereum", "eth", "solana", "sol ", "crypto", "dogecoin", "xrp"]
+# Строгие ключевые слова — только явные крипто-активы, чтобы не ловить случайные совпадения
+CRYPTO_KEYWORDS = [
+    "bitcoin", "btc ", "btc?", "btc,", "btc.", "ethereum", "eth ", "eth?", "eth.",
+    "solana", "sol ", "sol?", "sol.", "dogecoin", "xrp ", "xrp?", "ripple",
+    "crypto market", "cryptocurrency", "altcoin", "memecoin"
+]
 
 def _parse_json_field(value):
     if isinstance(value, list):
@@ -16,23 +20,36 @@ def _parse_json_field(value):
     except Exception:
         return []
 
+def _is_crypto_question(question: str) -> bool:
+    q = " " + question.lower() + " "
+    return any(k in q for k in CRYPTO_KEYWORDS)
+
 def get_crypto_markets(limit: int = 15) -> List[Dict]:
-    """Получить активные крипто-рынки с Polymarket отсортированные по объёму за 24ч"""
+    """Получить активные крипто-рынки с Polymarket через официальный тег 'Crypto'"""
     try:
+        # Сначала пробуем фильтр по тегу crypto
         r = requests.get(
             f"{GAMMA_BASE}/markets",
-            params={"active": "true", "closed": "false", "limit": 100, "order": "volume24hr", "ascending": "false"},
+            params={"active": "true", "closed": "false", "limit": 100, "order": "volume24hr", "ascending": "false", "tag": "crypto"},
             timeout=TIMEOUT
         )
-        if r.status_code != 200:
-            print(f"Polymarket fetch failed: status {r.status_code}")
-            return []
-        markets = r.json()
+        markets = []
+        if r.status_code == 200:
+            markets = r.json()
+        if not markets:
+            # fallback: без тега, фильтруем по ключевым словам вручную
+            r2 = requests.get(
+                f"{GAMMA_BASE}/markets",
+                params={"active": "true", "closed": "false", "limit": 200, "order": "volume24hr", "ascending": "false"},
+                timeout=TIMEOUT
+            )
+            if r2.status_code == 200:
+                markets = r2.json()
+
         results = []
         for m in markets:
             question = m.get("question", "")
-            q_lower = question.lower()
-            if not any(k in q_lower for k in CRYPTO_KEYWORDS):
+            if not _is_crypto_question(question):
                 continue
             outcomes = _parse_json_field(m.get("outcomes", "[]"))
             prices = _parse_json_field(m.get("outcomePrices", "[]"))
@@ -42,6 +59,8 @@ def get_crypto_markets(limit: int = 15) -> List[Dict]:
                 volume24h = float(m.get("volume24hr", 0) or 0)
             except Exception:
                 volume24h = 0
+            if volume24h < 1000:
+                continue
             outcome_data = []
             for o, p in zip(outcomes, prices):
                 try:
