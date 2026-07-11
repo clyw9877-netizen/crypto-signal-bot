@@ -93,8 +93,6 @@ def main():
     port = load_portfolio()
     send_message(f"🤖 <b>Бот перезапущен!</b>\nДепозит: ${port['deposit']:.2f}")
 
-    log.info("Sending test digest for Polymarket verification...")
-    safe(lambda: send_digest("pacific_morning"), "test_digest")
 
     schedule.every(SCAN_INTERVAL).seconds.do(scan_market)
     schedule.every().day.at(SCHEDULE_UTC["pacific_morning"]).do(lambda: send_digest("pacific_morning"))
