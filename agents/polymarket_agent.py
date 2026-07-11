@@ -70,7 +70,7 @@ def _fetch_by_tag(tag_id: int, limit: int = 100):
     return []
 
 def _search_keyword(keyword: str, limit: int = 30):
-    """Дополнительный поиск по ключевому слову в вопросе, чтобы найти конкретные темы вроде "Fed rate cuts in 2026""""
+    """Дополнительный поиск по ключевому слову в вопросе, чтобы найти конкретные темы вроде Fed rate cuts in 2026"""
     try:
         r = requests.get(
             f"{GAMMA_BASE}/markets",
