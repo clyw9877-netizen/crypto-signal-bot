@@ -2,7 +2,9 @@ import requests
 import json
 import os
 import re
+import time
 from bs4 import BeautifulSoup
+from agents.sentiment import detect_sentiment
 
 MIRRORS = ["https://xcancel.com", "https://nitter.net", "https://nitter.poast.org"]
 TIMEOUT = 8
@@ -45,24 +47,33 @@ CASHTAG_COINS = {
 }
 
 STATE_FILE = "data/twitter_state.json"
+SENTIMENT_FILE = "data/twitter_sentiment.json"
 
 
-def _load_state():
-    if os.path.exists(STATE_FILE):
+def _load_json(path):
+    if os.path.exists(path):
         try:
-            with open(STATE_FILE) as f:
+            with open(path) as f:
                 return json.load(f)
         except Exception:
             return {}
     return {}
 
 
-def _save_state(state):
+def _save_json(path, data):
     try:
-        with open(STATE_FILE, "w") as f:
-            json.dump(state, f)
+        with open(path, "w") as f:
+            json.dump(data, f)
     except Exception:
         pass
+
+
+def _load_state():
+    return _load_json(STATE_FILE)
+
+
+def _save_state(state):
+    _save_json(STATE_FILE, state)
 
 
 def _fetch_profile_html(username):
@@ -109,6 +120,28 @@ def _find_coins(text):
     return found
 
 
+def _record_sentiment(username, text, coins):
+    sentiment_state = _load_json(SENTIMENT_FILE)
+    direction = detect_sentiment(text)
+    if direction == "neutral":
+        return
+    now = time.time()
+    for coin in coins:
+        sentiment_state[coin] = {"direction": direction, "ts": now, "source": username, "text": text[:200]}
+    _save_json(SENTIMENT_FILE, sentiment_state)
+
+
+def get_recent_sentiment(symbol_base, max_age_hours=2):
+    sentiment_state = _load_json(SENTIMENT_FILE)
+    entry = sentiment_state.get(symbol_base)
+    if not entry:
+        return None
+    age_hours = (time.time() - entry.get("ts", 0)) / 3600
+    if age_hours > max_age_hours:
+        return None
+    return entry.get("direction")
+
+
 def check_account(username, state):
     html, base = _fetch_profile_html(username)
     if not html:
@@ -131,6 +164,7 @@ def check_account(username, state):
             continue
         coins = _find_coins(t["text"])
         if coins:
+            _record_sentiment(username, t["text"], coins)
             alerts.append({"username": username, "text": t["text"], "url": t["url"], "coins": coins})
     state[username] = tweets[0]["id"]
     return alerts
