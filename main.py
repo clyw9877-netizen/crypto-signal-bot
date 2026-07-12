@@ -88,6 +88,7 @@ def send_digest(kind: str):
 def check_twitter():
     try:
         alerts = check_all_accounts()
+        log.info(f"Twitter check done: {len(alerts)} alert(s)")
         for alert in alerts:
             log.info(f"Twitter alert: @{alert['username']} mentioned {alert['coins']}")
             safe(lambda a=alert: send_message(format_alert(a)), "twitter_alert")
