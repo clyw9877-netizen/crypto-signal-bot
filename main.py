@@ -6,6 +6,7 @@ from agents.chart_agent import draw_signal_chart
 from agents.news_agent import get_crypto_news, get_forex_factory_events, check_high_impact_now, format_morning_digest, format_evening_digest, format_signal_news
 from agents.portfolio_agent import load_portfolio, open_position, check_positions, format_position_opened, format_position_closed, get_portfolio_stats
 from agents.telegram_agent import send_message, send_photo, test_connection, send_signal
+from agents.twitter_agent import check_all_accounts, format_alert
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
 log = logging.getLogger(__name__)
@@ -84,6 +85,16 @@ def send_digest(kind: str):
     send_message(get_portfolio_stats())
     log.info(f"=== DIGEST [{kind}] DONE ===")
 
+def check_twitter():
+    try:
+        alerts = check_all_accounts()
+        for alert in alerts:
+            log.info(f"Twitter alert: @{alert['username']} mentioned {alert['coins']}")
+            safe(lambda a=alert: send_message(format_alert(a)), "twitter_alert")
+    except Exception as e:
+        log.error(f"Twitter monitor failed: {e}")
+
+
 def main():
     log.info("Starting Crypto Signal Bot...")
     os.makedirs("data", exist_ok=True)
@@ -95,6 +106,7 @@ def main():
 
 
     schedule.every(SCAN_INTERVAL).seconds.do(scan_market)
+    schedule.every(2).minutes.do(check_twitter)
     schedule.every().day.at(SCHEDULE_UTC["pacific_morning"]).do(lambda: send_digest("pacific_morning"))
     schedule.every().day.at(SCHEDULE_UTC["pacific_evening"]).do(lambda: send_digest("pacific_evening"))
     schedule.every().day.at(SCHEDULE_UTC["moscow_morning"]).do(lambda: send_digest("moscow_morning"))
