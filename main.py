@@ -1,5 +1,5 @@
 import time, schedule, logging, os, sys
-from config import COINS, SCAN_INTERVAL
+from config import COINS, SCAN_INTERVAL, CMC_API_KEY
 from agents.data_agent import get_candles, get_all_prices
 from agents.smc_agent import analyze_candles
 from agents.chart_agent import draw_signal_chart
@@ -7,6 +7,7 @@ from agents.news_agent import get_crypto_news, get_forex_factory_events, check_h
 from agents.portfolio_agent import load_portfolio, open_position, check_positions, format_position_opened, format_position_closed, get_portfolio_stats
 from agents.telegram_agent import send_message, send_photo, test_connection, send_signal
 from agents.twitter_agent import check_all_accounts, format_alert
+from agents.coinmarketcap_agent import get_global_metrics, format_market_overview
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
 log = logging.getLogger(__name__)
@@ -83,6 +84,10 @@ def send_digest(kind: str):
     label = "🇺🇸 твоё время" if "pacific" in kind else "🇷🇺 Москва"
     send_message(f"{label}\n\n{text}")
     send_message(get_portfolio_stats())
+    cm_metrics = safe(lambda: get_global_metrics(CMC_API_KEY), "cmc_metrics", None)
+    cm_text = format_market_overview(cm_metrics)
+    if cm_text:
+        send_message(cm_text)
     log.info(f"=== DIGEST [{kind}] DONE ===")
 
 def check_twitter():
