@@ -4,10 +4,11 @@ from agents.data_agent import get_candles, get_all_prices
 from agents.smc_agent import analyze_candles
 from agents.chart_agent import draw_signal_chart
 from agents.news_agent import get_crypto_news, get_forex_factory_events, check_high_impact_now, format_morning_digest, format_evening_digest, format_signal_news
-from agents.portfolio_agent import load_portfolio, open_position, check_positions, format_position_opened, format_position_closed, get_portfolio_stats
+from agents.portfolio_agent import load_portfolio, open_position, check_positions, format_position_opened, format_position_closed, get_portfolio_stats, get_trade_journal
 from agents.telegram_agent import send_message, send_photo, test_connection, send_signal
 from agents.twitter_agent import check_all_accounts, format_alert
 from agents.coinmarketcap_agent import get_global_metrics, format_market_overview
+from agents.coingecko_agent import get_top_movers, format_top_movers
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
 log = logging.getLogger(__name__)
@@ -88,6 +89,14 @@ def send_digest(kind: str):
     cm_text = format_market_overview(cm_metrics)
     if cm_text:
         send_message(cm_text)
+    movers = safe(get_top_movers, "coingecko_movers", None)
+    movers_text = format_top_movers(movers)
+    if movers_text:
+        send_message(movers_text)
+    if kind == "moscow_evening":
+        journal = safe(get_trade_journal, "trade_journal", None)
+        if journal:
+            send_message(journal)
     log.info(f"=== DIGEST [{kind}] DONE ===")
 
 def check_twitter():
