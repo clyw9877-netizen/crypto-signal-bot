@@ -6,8 +6,9 @@ from agents.decision_agent import enrich_signal
 from agents.chart_agent import draw_signal_chart
 from agents.news_agent import get_crypto_news, get_forex_factory_events, check_high_impact_now, format_morning_digest, format_evening_digest, format_signal_news
 from agents.portfolio_agent import load_portfolio, open_position, check_positions, format_position_opened, format_position_closed, get_portfolio_stats, get_trade_journal
-from agents.telegram_agent import send_message, send_photo, test_connection, send_signal
+from agents.telegram_agent import send_message, send_photo, test_connection, send_signal, get_new_messages
 from agents.twitter_agent import check_all_accounts, format_alert
+from agents.chat_agent import handle_message
 from agents.coinmarketcap_agent import get_global_metrics, format_market_overview
 from agents.coingecko_agent import get_top_movers, format_top_movers
 
@@ -101,6 +102,16 @@ def send_digest(kind: str):
             send_message(journal)
     log.info(f"=== DIGEST [{kind}] DONE ===")
 
+def check_chat_questions():
+    try:
+        for chat_id, text in get_new_messages():
+            reply = handle_message(text)
+            if reply:
+                send_message(reply, chat_id=chat_id)
+    except Exception as e:
+        log.error(f"Chat check failed: {e}")
+
+
 def check_twitter():
     try:
         alerts = check_all_accounts()
@@ -124,6 +135,7 @@ def main():
 
     schedule.every(SCAN_INTERVAL).seconds.do(scan_market)
     schedule.every(2).minutes.do(check_twitter)
+    schedule.every(10).seconds.do(check_chat_questions)
     schedule.every().day.at(SCHEDULE_UTC["pacific_morning"]).do(lambda: send_digest("pacific_morning"))
     schedule.every().day.at(SCHEDULE_UTC["pacific_evening"]).do(lambda: send_digest("pacific_evening"))
     schedule.every().day.at(SCHEDULE_UTC["moscow_morning"]).do(lambda: send_digest("moscow_morning"))
