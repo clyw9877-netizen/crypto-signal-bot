@@ -2,6 +2,7 @@ import time, schedule, logging, os, sys
 from config import COINS, SCAN_INTERVAL, CMC_API_KEY
 from agents.data_agent import get_candles, get_all_prices
 from agents.smc_agent import analyze_candles
+from agents.decision_agent import enrich_signal
 from agents.chart_agent import draw_signal_chart
 from agents.news_agent import get_crypto_news, get_forex_factory_events, check_high_impact_now, format_morning_digest, format_evening_digest, format_signal_news
 from agents.portfolio_agent import load_portfolio, open_position, check_positions, format_position_opened, format_position_closed, get_portfolio_stats, get_trade_journal
@@ -42,6 +43,7 @@ def scan_market():
         send_message(format_position_closed(pos, p["deposit"]))
     if closed:
         log.info(f"Closed {len(closed)} positions")
+    news = safe(get_crypto_news, "get_crypto_news", [])
     signals = []
     for idx, symbol in enumerate(COINS):
         try:
@@ -49,6 +51,7 @@ def scan_market():
             if len(candles) < 30:
                 continue
             signal = analyze_candles(symbol, candles)
+            signal = enrich_signal(signal, symbol, news)
             if signal["signal"] == "none" or signal["confidence"] < 55:
                 continue
             key = f"{symbol}_{signal['signal']}_{int(signal['price']/100)}"
@@ -64,7 +67,6 @@ def scan_market():
             if len(port["open_positions"]) < 3:
                 pos = open_position(signal)
                 chart = draw_signal_chart(symbol, candles, signal)
-                news = safe(get_crypto_news, "get_crypto_news", [])
                 related = [n for n in news if symbol.split("-")[0] in n.get("currencies",[])]
                 send_signal(signal, chart, format_signal_news(signal, related))
                 send_message(format_position_opened(pos))
