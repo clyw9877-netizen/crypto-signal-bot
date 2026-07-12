@@ -23,13 +23,19 @@ def get_position_size(deposit: float, confidence: int):
             return deposit * size_pct / 100, leverage
     return deposit * 0.2, 5
 
+def calc_liquidation_price(entry: float, leverage: float, direction: str) -> float:
+    if direction == "long":
+        return entry * (1 - 1 / leverage)
+    return entry * (1 + 1 / leverage)
+
 def open_position(signal: Dict) -> Optional[Dict]:
     portfolio = load_portfolio()
     deposit = portfolio["deposit"]
     confidence = signal.get("confidence", 50)
     size, leverage = get_position_size(deposit, confidence)
     fee_open = size * leverage * BINGX_FEE
-    position = {"id":len(portfolio["trades"])+1,"symbol":signal["symbol"],"direction":signal["signal"],"entry_price":signal["price"],"sl":signal["sl"],"tp":signal["tp"],"size":size,"leverage":leverage,"fee_open":fee_open,"confidence":confidence,"reasons":signal.get("reasons",[]),"opened_at":datetime.now().isoformat(),"status":"open"}
+    liquidation = calc_liquidation_price(signal["price"], leverage, signal["signal"])
+    position = {"liquidation":liquidation,"id":len(portfolio["trades"])+1,"symbol":signal["symbol"],"direction":signal["signal"],"entry_price":signal["price"],"sl":signal["sl"],"tp":signal["tp"],"size":size,"leverage":leverage,"fee_open":fee_open,"confidence":confidence,"reasons":signal.get("reasons",[]),"opened_at":datetime.now().isoformat(),"status":"open"}
     portfolio["open_positions"].append(position)
     save_portfolio(portfolio)
     return position
@@ -71,11 +77,17 @@ def check_positions(current_prices: Dict) -> List[Dict]:
 
 def format_position_opened(pos: Dict) -> str:
     dir_text = "ЛОНГ 🟢" if pos["direction"] == "long" else "ШОРТ 🔴"
+    liq = pos.get("liquidation")
+    liq_danger = False
+    if liq:
+        liq_danger = liq >= pos["sl"] if pos["direction"] == "long" else liq <= pos["sl"]
+    liq_line = f"Ликвидация: ${liq:,.2f}" + (" ⚠️ БЛИЖЕ СТОПА!" if liq_danger else "") + "\n" if liq else ""
     return (f"<b>✅ Позиция открыта #{pos['id']}</b>\n"
             f"{pos['symbol']} {dir_text}\n"
             f"Вход: ${pos['entry_price']:,.2f}\n"
             f"SL: ${pos['sl']:,.2f}\n"
             f"TP: ${pos['tp']:,.2f}\n"
+            f"{liq_line}"
             f"Плечо: x{pos['leverage']}\n"
             f"Размер позиции: ${pos['size']:,.2f}\n"
             f"Уверенность: {pos['confidence']}%")
