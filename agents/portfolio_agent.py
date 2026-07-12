@@ -116,3 +116,50 @@ def get_portfolio_stats() -> str:
             f"Винрейт: {round(wr)}%\n"
             f"Общий P&L: ${p['total_pnl']:,.2f}\n"
             f"Открытых позиций: {len(p['open_positions'])}")
+
+def get_trade_journal(min_trades=3):
+    p = load_portfolio()
+    closed = [t for t in p.get("trades", []) if t.get("status") == "closed"]
+    if len(closed) < min_trades:
+        return None
+
+    by_symbol = {}
+    for t in closed:
+        s = t["symbol"]
+        by_symbol.setdefault(s, {"wins": 0, "losses": 0, "pnl": 0.0})
+        by_symbol[s]["pnl"] += t["net_pnl"]
+        if t["result"] == "win":
+            by_symbol[s]["wins"] += 1
+        else:
+            by_symbol[s]["losses"] += 1
+    ranked = sorted(by_symbol.items(), key=lambda kv: kv[1]["pnl"], reverse=True)
+
+    by_conf = {}
+    for t in closed:
+        tier = (t["confidence"] // 10) * 10
+        by_conf.setdefault(tier, {"wins": 0, "total": 0})
+        by_conf[tier]["total"] += 1
+        if t["result"] == "win":
+            by_conf[tier]["wins"] += 1
+
+    best_trade = max(closed, key=lambda t: t["net_pnl"])
+    worst_trade = min(closed, key=lambda t: t["net_pnl"])
+    total_fees = sum(t.get("fee_open", 0) + t.get("fee_close", 0) for t in closed)
+
+    lines = ["<b>📓 Журнал сделок</b>", ""]
+    lines.append("По монетам (P&L):")
+    for symbol, stats in ranked[:5]:
+        total = stats["wins"] + stats["losses"]
+        wr = stats["wins"] / total * 100 if total > 0 else 0
+        lines.append(f"  {symbol}: ${stats['pnl']:+,.2f} (винрейт {round(wr)}%, {total} сделок)")
+    lines.append("")
+    lines.append("По уверенности сигнала:")
+    for tier in sorted(by_conf.keys()):
+        stats = by_conf[tier]
+        wr = stats["wins"] / stats["total"] * 100 if stats["total"] > 0 else 0
+        lines.append(f"  {tier}-{tier+9}%: винрейт {round(wr)}% ({stats['total']} сделок)")
+    lines.append("")
+    lines.append(f"Лучшая сделка: {best_trade['symbol']} ${best_trade['net_pnl']:+,.2f}")
+    lines.append(f"Худшая сделка: {worst_trade['symbol']} ${worst_trade['net_pnl']:+,.2f}")
+    lines.append(f"Комиссии всего: ${total_fees:,.2f}")
+    return "\n".join(lines)
