@@ -3,3 +3,4 @@ matplotlib
 schedule
 numpy
 python-dateutil
+beautifulsoup4
