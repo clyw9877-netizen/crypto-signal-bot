@@ -10,7 +10,11 @@ MIRRORS = ["https://xcancel.com", "https://nitter.net", "https://nitter.poast.or
 TIMEOUT = 8
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
-ACCOUNTS = ["elonmusk", "realDonaldTrump"]
+ACCOUNTS = [
+    "elonmusk", "realDonaldTrump",
+    "VitalikButerin", "saylor", "cz_binance",
+    "WatcherGuru", "DocumentingBTC", "APompliano",
+]
 
 COIN_KEYWORDS = {
     "BTC": ["bitcoin", "btc"],
@@ -186,7 +190,7 @@ def check_all_accounts(usernames=None):
 def format_alert(alert):
     coins_str = ", ".join(alert["coins"])
     return (
-        f"🚨 <b>Твит про {coins_str}!</b>\n\n"
+        f"🚨 <b>Твит про {coins_str}</b>\n\n"
         f"👤 @{alert['username']}\n"
         f"💬 {alert['text']}\n\n"
         f"🔗 {alert['url']}"
