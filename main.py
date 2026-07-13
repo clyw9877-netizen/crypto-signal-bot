@@ -19,8 +19,6 @@ sent_signals = set()
 SCHEDULE_UTC = {
     "pacific_morning": "15:00",
     "pacific_evening": "05:00",
-    "moscow_morning":  "05:00",
-    "moscow_evening":  "19:00",
 }
 
 def safe(fn, name, default=None):
@@ -85,8 +83,7 @@ def send_digest(kind: str):
         text = format_morning_digest(prices, events, news)
     else:
         text = format_evening_digest(prices, events, news)
-    label = "🇺🇸 твоё время" if "pacific" in kind else "🇷🇺 Москва"
-    send_message(f"{label}\n\n{text}")
+    send_message(text)
     send_message(get_portfolio_stats())
     cm_metrics = safe(lambda: get_global_metrics(CMC_API_KEY), "cmc_metrics", None)
     cm_text = format_market_overview(cm_metrics)
@@ -96,7 +93,7 @@ def send_digest(kind: str):
     movers_text = format_top_movers(movers)
     if movers_text:
         send_message(movers_text)
-    if kind == "moscow_evening":
+    if kind == "pacific_evening":
         journal = safe(get_trade_journal, "trade_journal", None)
         if journal:
             send_message(journal)
@@ -138,8 +135,6 @@ def main():
     schedule.every(10).seconds.do(check_chat_questions)
     schedule.every().day.at(SCHEDULE_UTC["pacific_morning"]).do(lambda: send_digest("pacific_morning"))
     schedule.every().day.at(SCHEDULE_UTC["pacific_evening"]).do(lambda: send_digest("pacific_evening"))
-    schedule.every().day.at(SCHEDULE_UTC["moscow_morning"]).do(lambda: send_digest("moscow_morning"))
-    schedule.every().day.at(SCHEDULE_UTC["moscow_evening"]).do(lambda: send_digest("moscow_evening"))
 
     scan_market()
     log.info("Entering main loop...")
