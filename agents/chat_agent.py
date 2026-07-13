@@ -1,6 +1,6 @@
 import re
 from config import COINS
-from agents.data_agent import get_candles, get_all_prices
+from agents.data_agent import get_candles, get_all_prices, get_24h_stats
 from agents.smc_agent import analyze_candles
 from agents.decision_agent import enrich_signal
 from agents.news_agent import get_crypto_news
@@ -31,10 +31,14 @@ COIN_ALIASES = {
     "WIF": ["wif", "dogwifhat"],
     "PEPE": ["pepe"],
     "SHIB": ["shib", "shiba"],
+    "HYPE": ["hype", "hyperliquid", "хайп"],
 }
 
-MARKET_WORDS = ["рынок", "market", "обстановка", "ситуация"]
+MARKET_WORDS = ["рынок", "маркет", "market", "обстановка", "ситуация"]
 NEWS_WORDS = ["новост", "news"]
+
+STOPWORDS = {"как", "рынок", "маркет", "что", "цена", "цены", "монета", "монету", "монеты",
+             "по", "на", "за", "market", "price", "news", "новости", "и", "в", "у", "с", "из", "го"}
 
 
 def _find_symbol_in_text(text):
@@ -42,9 +46,30 @@ def _find_symbol_in_text(text):
     for base, aliases in COIN_ALIASES.items():
         for a in aliases:
             if re.search(r"\b" + re.escape(a) + r"\b", tl):
-                symbol = f"{base}-USDT"
-                if symbol in COINS:
-                    return symbol
+                return f"{base}-USDT"
+    return _find_symbol_on_exchange(text)
+
+
+def _find_symbol_on_exchange(text):
+    tl = text.lower()
+    candidate = None
+    m = re.search(r"\b([a-z0-9]{2,10})[\s/\-]?usdt\b", tl)
+    if m:
+        candidate = m.group(1).upper()
+    else:
+        words = re.findall(r"[a-zA-Zа-яА-Я0-9]{2,10}", text)
+        candidates = [w for w in words if w.lower() not in STOPWORDS and not w.isdigit()]
+        if len(candidates) == 1:
+            candidate = candidates[0].upper()
+    if not candidate:
+        return None
+    symbol = f"{candidate}-USDT"
+    try:
+        stats = get_24h_stats(symbol)
+    except Exception:
+        stats = None
+    if stats and stats.get("price"):
+        return symbol
     return None
 
 
@@ -79,12 +104,20 @@ def _format_coin_reply(symbol):
 
 
 def _format_market_overview():
-    prices = get_all_prices(["BTC-USDT", "ETH-USDT", "SOL-USDT"])
-    lines = ["<b>Обзор рынка</b>"]
-    for sym in ["BTC-USDT", "ETH-USDT", "SOL-USDT"]:
-        p = prices.get(sym)
-        if p:
-            lines.append(f"{sym}: ${p:,.2f}")
+    lines = ["<b>📊 Обзор рынка</b>"]
+    for sym in COINS:
+        try:
+            stats = get_24h_stats(sym)
+        except Exception:
+            stats = None
+        if not stats or not stats.get("price"):
+            continue
+        price = stats["price"]
+        change = stats.get("change", 0.0)
+        emoji = "🟢" if change >= 0 else "🔴"
+        base = sym.replace("-USDT", "")
+        price_str = f"${price:,.2f}" if price >= 1 else f"${price:,.6f}"
+        lines.append(f"{emoji} <b>{base}</b>: {price_str} ({change:+.1f}%)")
     if len(lines) == 1:
         return "Не могу получить цены прямо сейчас."
     return "\n".join(lines)
