@@ -2,6 +2,7 @@ import requests
 from datetime import datetime, date
 from dateutil import parser as dateparser
 from typing import List, Dict
+from bs4 import BeautifulSoup
 from agents.polymarket_agent import get_crypto_markets, format_polymarket_section
 
 TIMEOUT = 6
@@ -49,9 +50,9 @@ def is_crypto_relevant(event: dict) -> bool:
     return any(k in title for k in relevant_keywords)
 
 def get_crypto_news() -> List[Dict]:
+    news = []
     try:
         r = requests.get("https://cryptopanic.com/api/v1/posts/", params={"auth_token":"free","public":"true","kind":"news","filter":"hot"}, timeout=TIMEOUT)
-        news = []
         for item in r.json().get("results", [])[:10]:
             news.append({
                 "title": item.get("title",""),
@@ -60,10 +61,47 @@ def get_crypto_news() -> List[Dict]:
                 "votes_positive": item.get("votes",{}).get("positive",0),
                 "currencies": [c["code"] for c in item.get("currencies",[])]
             })
-        return news
     except Exception as e:
-        print("get_crypto_news error:", e)
-        return []
+        print("get_crypto_news (CryptoPanic) error:", e)
+    try:
+        news.extend(get_investing_news())
+    except Exception as e:
+        print("get_crypto_news (Investing) error:", e)
+    return news
+
+def get_investing_news() -> List[Dict]:
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"}
+    candidate_urls = [
+        "https://www.investing.com/rss/news_301.rss",
+        "https://www.investing.com/rss/news_285.rss",
+    ]
+    for url in candidate_urls:
+        try:
+            r = requests.get(url, headers=headers, timeout=TIMEOUT)
+            if r.status_code != 200:
+                continue
+            soup = BeautifulSoup(r.text, "html.parser")
+            items = soup.find_all("item")
+            if not items:
+                continue
+            news = []
+            for item in items[:10]:
+                title_tag = item.find("title")
+                link_tag = item.find("link")
+                if not title_tag:
+                    continue
+                news.append({
+                    "title": title_tag.get_text(strip=True),
+                    "source": "Investing.com",
+                    "url": link_tag.get_text(strip=True) if link_tag else "",
+                    "votes_positive": 0,
+                    "currencies": []
+                })
+            if news:
+                return news
+        except Exception as e:
+            print(f"get_investing_news error ({url}):", e)
+    return []
 
 def _parse_event_date(raw_date: str):
     try:
@@ -211,9 +249,10 @@ def format_signal_news(signal, related_news) -> str:
     for n in related_news[:2]:
         sentiment = "🟢 Позитив" if n.get("votes_positive",0) > 0 else "⚪ Нейтрально"
         link = n.get("url","")
-        title_n = n["title"][:70]
+        title_n = n["title"][:80]
+        text += f"{sentiment}: "
         if link:
-            text += f'• {sentiment}: <a href="{link}">{title_n}</a>\n'
+            text += f'<a href="{link}">{title_n}</a>\n'
         else:
-            text += f"• {sentiment}: {title_n}\n"
+            text += f"{title_n}\n"
     return text
