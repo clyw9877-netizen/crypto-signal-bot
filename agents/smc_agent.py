@@ -150,9 +150,13 @@ def analyze_candles(symbol, candles):
     atr = calc_atr(candles)
     if direction == "long":
         sl = (sweep["wick_low"] - atr * 0.5) if (sweep and sweep["type"] == "bullish") else (current_price - atr * 2)
+        if sl >= current_price:
+            sl = current_price - atr * 2
         tp = current_price + (current_price - sl) * 2
     else:
         sl = (sweep["wick_high"] + atr * 0.5) if (sweep and sweep["type"] == "bearish") else (current_price + atr * 2)
+        if sl <= current_price:
+            sl = current_price + atr * 2
         tp = current_price - (sl - current_price) * 2
 
     rr = abs(tp - current_price) / abs(sl - current_price)
