@@ -8,6 +8,15 @@ BASE_URL = "https://api.telegram.org/bot" + TELEGRAM_TOKEN
 OFFSET_FILE = "data/telegram_offset.json"
 
 
+def format_price(value):
+    if value >= 1:
+        return f"{value:,.2f}"
+    elif value >= 0.01:
+        return f"{value:.4f}"
+    else:
+        return f"{value:.6f}"
+
+
 def send_message(text, chat_id=None, parse_mode="HTML"):
     try:
         chat = chat_id or TELEGRAM_CHANNEL
@@ -62,9 +71,9 @@ def send_signal(signal, chart_bytes, news_text=""):
 
 
     caption = f"<b>{s.get('symbol','')} — {dir_text}</b> {confidence_emoji} {confidence}%\n\n"
-    caption += f"Вход: <b>${entry:,.2f}</b>\n"
-    caption += f"SL: <b>${sl:,.2f}</b>\n"
-    caption += f"TP: <b>${tp:,.2f}</b>\n"
+    caption += f"Вход: <b>${format_price(entry)}</b>\n"
+    caption += f"SL: <b>${format_price(sl)}</b>\n"
+    caption += f"TP: <b>${format_price(tp)}</b>\n"
     caption += f"📊 RR: <b>1:{rr:.1f}</b>\n"
     caption += f"📈 RSI: <b>{rsi:.0f}</b>\n\n"
     if reasons_ru:
