@@ -75,18 +75,26 @@ def check_positions(current_prices: Dict) -> List[Dict]:
     save_portfolio(portfolio)
     return closed
 
+def _format_price(value: float) -> str:
+    if value >= 1:
+        return f"{value:,.2f}"
+    elif value >= 0.01:
+        return f"{value:.4f}"
+    else:
+        return f"{value:.6f}"
+
 def format_position_opened(pos: Dict) -> str:
     dir_text = "ЛОНГ 🟢" if pos["direction"] == "long" else "ШОРТ 🔴"
     liq = pos.get("liquidation")
     liq_danger = False
     if liq:
         liq_danger = liq >= pos["sl"] if pos["direction"] == "long" else liq <= pos["sl"]
-    liq_line = f"Ликвидация: ${liq:,.2f}" + (" ⚠️ БЛИЖЕ СТОПА!" if liq_danger else "") + "\n" if liq else ""
+    liq_line = f"Ликвидация: ${_format_price(liq)}" + (" ⚠️ БЛИЖЕ СТОПА!" if liq_danger else "") + "\n" if liq else ""
     return (f"<b>✅ Позиция открыта #{pos['id']}</b>\n"
             f"{pos['symbol']} {dir_text}\n"
-            f"Вход: ${pos['entry_price']:,.2f}\n"
-            f"SL: ${pos['sl']:,.2f}\n"
-            f"TP: ${pos['tp']:,.2f}\n"
+            f"Вход: ${_format_price(pos['entry_price'])}\n"
+            f"SL: ${_format_price(pos['sl'])}\n"
+            f"TP: ${_format_price(pos['tp'])}\n"
             f"{liq_line}"
             f"Плечо: x{pos['leverage']}\n"
             f"Размер позиции: ${pos['size']:,.2f}\n"
