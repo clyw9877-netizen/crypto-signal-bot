@@ -32,6 +32,10 @@ COIN_ALIASES = {
     "PEPE": ["pepe"],
     "SHIB": ["shib", "shiba"],
     "HYPE": ["hype", "hyperliquid", "хайп"],
+    "GOLD": ["gold", "золото", "золота", "xau"],
+    "NASDAQ100": ["nasdaq", "nasdaq100", "насдак", "us100"],
+    "SP500": ["sp500", "s&p500", "s&p 500", "снп500", "спи500"],
+    "US30": ["us30", "dow", "dowjones", "доу", "доу джонс"],
 }
 
 MARKET_WORDS = ["рынок", "маркет", "market", "обстановка", "ситуация"]
