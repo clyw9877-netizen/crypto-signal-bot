@@ -5,6 +5,18 @@ from agents.smc_agent import analyze_candles
 from agents.decision_agent import enrich_signal
 from agents.news_agent import get_crypto_news
 
+import math
+
+
+def _format_price(value):
+    if value <= 0:
+        return "0"
+    if value >= 1:
+        return f"{value:,.2f}"
+    magnitude = math.floor(math.log10(abs(value)))
+    decimals = max(4, -magnitude + 3)
+    return f"{value:.{decimals}f}"
+
 COIN_ALIASES = {
     "BTC": ["btc", "bitcoin", "биткоин", "биток"],
     "ETH": ["eth", "ethereum", "эфир", "эфириум"],
@@ -94,7 +106,7 @@ def _format_coin_reply(symbol):
         pass
     signal = enrich_signal(dict(signal), symbol, news)
 
-    lines = [f"<b>{symbol}</b>: ${price:,.2f} ({change:+.1f}% за ~24ч)"]
+    lines = [f"<b>{symbol}</b>: ${_format_price(price)} ({change:+.1f}% за ~24ч)"]
     if signal.get("signal") in ("long", "short"):
         dir_text = "ЛОНГ 🟢" if signal["signal"] == "long" else "ШОРТ 🔴"
         lines.append(f"Сетап: {dir_text}, уверенность {signal['confidence']}%")
@@ -120,7 +132,7 @@ def _format_market_overview():
         change = stats.get("change", 0.0)
         emoji = "🟢" if change >= 0 else "🔴"
         base = sym.replace("-USDT", "")
-        price_str = f"${price:,.2f}" if price >= 1 else f"${price:,.6f}"
+        price_str = f"${_format_price(price)}"
         lines.append(f"{emoji} <b>{base}</b>: {price_str} ({change:+.1f}%)")
     if len(lines) == 1:
         return "Не могу получить цены прямо сейчас."
