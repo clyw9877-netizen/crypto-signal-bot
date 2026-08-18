@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+import math
 from config import TELEGRAM_TOKEN, TELEGRAM_CHANNEL
 
 
@@ -9,12 +10,13 @@ OFFSET_FILE = "data/telegram_offset.json"
 
 
 def format_price(value):
+    if value <= 0:
+        return "0"
     if value >= 1:
         return f"{value:,.2f}"
-    elif value >= 0.01:
-        return f"{value:.4f}"
-    else:
-        return f"{value:.6f}"
+    magnitude = math.floor(math.log10(abs(value)))
+    decimals = max(4, -magnitude + 3)
+    return f"{value:.{decimals}f}"
 
 
 def send_message(text, chat_id=None, parse_mode="HTML"):
