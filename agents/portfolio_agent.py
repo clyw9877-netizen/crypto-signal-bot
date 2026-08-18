@@ -1,5 +1,6 @@
 import json
 import os
+import math
 from datetime import datetime
 from typing import Dict, List, Optional
 from config import VIRTUAL_DEPOSIT, BINGX_FEE, CONFIDENCE_MATRIX
@@ -76,12 +77,13 @@ def check_positions(current_prices: Dict) -> List[Dict]:
     return closed
 
 def _format_price(value: float) -> str:
+    if value <= 0:
+        return "0"
     if value >= 1:
         return f"{value:,.2f}"
-    elif value >= 0.01:
-        return f"{value:.4f}"
-    else:
-        return f"{value:.6f}"
+    magnitude = math.floor(math.log10(abs(value)))
+    decimals = max(4, -magnitude + 3)
+    return f"{value:.{decimals}f}"
 
 def format_position_opened(pos: Dict) -> str:
     dir_text = "ЛОНГ 🟢" if pos["direction"] == "long" else "ШОРТ 🔴"
