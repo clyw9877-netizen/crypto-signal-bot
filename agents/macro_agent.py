@@ -232,5 +232,35 @@ BIAS_RU = {
 
 
 def format_macro_section(max_items=5, max_age_hours=MAX_AGE_HOURS):
-    """Секция для дайджеста. Lпортыват tr внутри — что быр�-]R�-��=-�]-�]r�=mM��"" �g&��vV�G2�G&�6�FR���'BG ��WfV�G2�&V6V�E�WfV�G2����vU���W'2���b��BWfV�G3��&WGW&�" ���fW&���vWE��7&��&�2����vU���W'2��FW�B�#�#�	���	����M��#��� �FW�B��b-
-M�������#�$�5�%U��fW&�Ųv&�2u�����#����� ��6VV��6WB���6��v�� �f�"R��WfV�G3���W��U�'FW�B%ճ�cТ�b�W���6VV㠢6��F��VP�6VV��FB��W�����&V���5$��D��55�U�'F��72%ճ�ղ&�&V�%Т�&���'&�6����#�/	��""�'&�6���fb#�/	�KB"�&�WWG&�#�.)��'նU�&&�2%�Т7V��'��G"�U�'FW�B%ҕ��##ТFW�B��bw��&���#��&V����#�+r�U�'W6W&��R%����p��bR�vWB�'W&�"���FW�B��bs��&Vc�'�U�'W&�%��#�7V��'���������p�V�6S��FW�B��b'�7V��'������ ��6��v�����b6��v�������FV�3��'&V��&WGW&�FW�@
+    """Секция для дайджеста. Импорт tr внутри — чтобы не тянуть сеть без нужды."""
+    from agents.translate import tr
+
+    events = recent_events(max_age_hours)
+    if not events:
+        return ""
+
+    overall = get_macro_bias(max_age_hours)
+    text = "<b>🌍 Макро-радар</b>\n"
+    text += f"Фон рынка: <b>{BIAS_RU[overall['bias']]}</b>\n\n"
+
+    seen = set()
+    shown = 0
+    for e in events:
+        key = e["text"][:60]
+        if key in seen:
+            continue
+        seen.add(key)
+
+        label = MACRO_TOPICS[e["topics"][0]]["label"]
+        mark = {"risk_on": "🟢", "risk_off": "🔴", "neutral": "⚪"}[e["bias"]]
+        summary = tr(e["text"])[:220]
+        text += f'{mark} <b>{label}</b> · @{e["username"]}\n'
+        if e.get("url"):
+            text += f'<a href="{e["url"]}">{summary}</a>\n\n'
+        else:
+            text += f"{summary}\n\n"
+
+        shown += 1
+        if shown >= max_items:
+            break
+    return text
