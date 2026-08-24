@@ -46,14 +46,11 @@ def _priority_score(question: str) -> int:
     return 0
 
 def _verify_url(url: str) -> bool:
+    # Только HEAD и короткий таймаут — раньше был ещё запасной GET,
+    # который на каждой мёртвой ссылке удваивал время ожидания.
+    # При десятках мёртвых ссылок в дайджесте это блокировало бота на 1-2 минуты.
     try:
-        r = requests.head(url, timeout=4, allow_redirects=True)
-        if r.status_code < 400:
-            return True
-    except Exception:
-        pass
-    try:
-        r = requests.get(url, timeout=4, allow_redirects=True)
+        r = requests.head(url, timeout=2, allow_redirects=True)
         return r.status_code < 400
     except Exception:
         return False
@@ -141,12 +138,17 @@ def get_crypto_markets(limit: int = 5) -> List[Dict]:
     scored.sort(key=lambda x: (-x["score"], -x["volume24h"]))
 
     final = []
+    checked = 0
+    max_checks = 15  # жёсткий предел — иначе десятки мёртвых ссылок подряд
+                      # блокируют бота на минуту и больше
     for m in scored:
-        if len(final) >= limit:
+        if len(final) >= limit or checked >= max_checks:
             break
-        if m["url"] and not _verify_url(m["url"]):
-            print(f"Polymarket dead link skipped: {m['url']}")
-            continue
+        if m["url"]:
+            checked += 1
+            if not _verify_url(m["url"]):
+                print(f"Polymarket dead link skipped: {m['url']}")
+                continue
         final.append(m)
     return final
 
@@ -160,17 +162,17 @@ REPLACEMENTS = [
     (r"will solana (reach|hit|exceed|surpass) \$?([\d,]+)k?.*", r"Достигнет ли Solana \$\2?"),
     (r"will xrp (reach|hit|exceed|surpass) \$?([\d,]+)k?.*", r"Достигнет ли XRP \$\2?"),
     (r"will dogecoin (reach|hit|exceed|surpass) \$?([\d,]+)k?.*", r"Достигнет ли Dogecoin \$\2?"),
-    (r"will there be a (us )?recession in (\d{4}).*", r"Будет ли рецессия в P��P� в \2 году?"),
+    (r"will there be a (us )?recession in (\d{4}).*", r"Будет ли рецессия в США в \2 году?"),
     (r"will (us )?cpi (come in |be )?(above|below|higher than|lower than) ([\d.]+%?).*", r"Будет ли CPI \3 \4?"),
     (r"will (us )?inflation (rise|increase) in (\d{4}).*", r"Вырастет ли инфляция в \3 году?"),
     (r"will (us )?inflation (fall|decrease|drop) in (\d{4}).*", r"Упадёт ли инфляция в \3 году?"),
     (r"will (there be a |a )?(us )?government shutdown.*", "Будет ли шатдаун правительства США?"),
-    (r"will israel and iran reach a ceasefire.*", "Договорятся ли Izrael `и Иран о прекращении огня?"),
+    (r"will israel and iran reach a ceasefire.*", "Договорятся ли Израиль и Иран о прекращении огня?"),
     (r"will russia and ukraine reach a ceasefire.*", "Договорятся ли Россия и Украина о прекращении огня?"),
     (r"iran agrees to end enrichment of uranium.*", "Согласится ли Иран прекратить обогащение урана?"),
-    (r"will (the )?us(a)? strike iran.*", "Атакует ли США Иран?"),
+    (r"will (the )?us(a)? strike iran.*", "Атакуют ли США Иран?"),
     (r"will russia invade (.+?)\??$", r"Вторгнется ли Россия в \1?"),
-    (r"will (nato|nato member) invoke article 5.*", "Применит ли NATO статью 5?"),
+    (r"will (nato|nato member) invoke article 5.*", "Применит ли НАТО статью 5?"),
     (r"putin out as president of russia by (.+?)\??$", r"Уйдёт ли Путин с поста президента России до \1?"),
     (r"will trump meet (with )?putin by (.+?)\??$", r"Встретится ли Трамп с Путиным до \2?"),
     (r"will ukraine recapture crimean? territory by (.+?)\??$", r"Вернёт ли Украина территорию Крыма до \1?"),
