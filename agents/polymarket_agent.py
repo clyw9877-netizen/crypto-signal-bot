@@ -3,6 +3,8 @@ import json
 import re
 from typing import List, Dict
 
+from agents.translate import tr
+
 TIMEOUT = 6
 GAMMA_BASE = "https://gamma-api.polymarket.com"
 
@@ -158,17 +160,17 @@ REPLACEMENTS = [
     (r"will solana (reach|hit|exceed|surpass) \$?([\d,]+)k?.*", r"Достигнет ли Solana \$\2?"),
     (r"will xrp (reach|hit|exceed|surpass) \$?([\d,]+)k?.*", r"Достигнет ли XRP \$\2?"),
     (r"will dogecoin (reach|hit|exceed|surpass) \$?([\d,]+)k?.*", r"Достигнет ли Dogecoin \$\2?"),
-    (r"will there be a (us )?recession in (\d{4}).*", r"Будет ли рецессия в США в \2 году?"),
+    (r"will there be a (us )?recession in (\d{4}).*", r"Будет ли рецессия в P��P� в \2 году?"),
     (r"will (us )?cpi (come in |be )?(above|below|higher than|lower than) ([\d.]+%?).*", r"Будет ли CPI \3 \4?"),
     (r"will (us )?inflation (rise|increase) in (\d{4}).*", r"Вырастет ли инфляция в \3 году?"),
     (r"will (us )?inflation (fall|decrease|drop) in (\d{4}).*", r"Упадёт ли инфляция в \3 году?"),
     (r"will (there be a |a )?(us )?government shutdown.*", "Будет ли шатдаун правительства США?"),
-    (r"will israel and iran reach a ceasefire.*", "Договорятся ли Израиль и Иран о прекращении огня?"),
+    (r"will israel and iran reach a ceasefire.*", "Договорятся ли Izrael `и Иран о прекращении огня?"),
     (r"will russia and ukraine reach a ceasefire.*", "Договорятся ли Россия и Украина о прекращении огня?"),
     (r"iran agrees to end enrichment of uranium.*", "Согласится ли Иран прекратить обогащение урана?"),
-    (r"will (the )?us(a)? strike iran.*", "Атакуют ли США Иран?"),
+    (r"will (the )?us(a)? strike iran.*", "Атакует ли США Иран?"),
     (r"will russia invade (.+?)\??$", r"Вторгнется ли Россия в \1?"),
-    (r"will (nato|nato member) invoke article 5.*", "Применит ли НАТО статью 5?"),
+    (r"will (nato|nato member) invoke article 5.*", "Применит ли NATO статью 5?"),
     (r"putin out as president of russia by (.+?)\??$", r"Уйдёт ли Путин с поста президента России до \1?"),
     (r"will trump meet (with )?putin by (.+?)\??$", r"Встретится ли Трамп с Путиным до \2?"),
     (r"will ukraine recapture crimean? territory by (.+?)\??$", r"Вернёт ли Украина территорию Крыма до \1?"),
@@ -178,28 +180,50 @@ REPLACEMENTS = [
     (r"will (\w+) (reach|hit|exceed|surpass) \$?([\d,]+)k?.*", r"Достигнет ли монета «\1» отметки \$\3?"),
 ]
 
+OUTCOME_RU = {
+    "yes": "Да",
+    "no": "Нет",
+    "up": "Вверх",
+    "down": "Вниз",
+}
+
+
+def _translate_outcome(name: str) -> str:
+    return OUTCOME_RU.get((name or "").strip().lower(), name)
+
+
 def _translate_question(question: str) -> str:
+    """Сначала шаблоны (дают самые аккуратные формулировки),
+    иначе — машинный перевод с кэшем."""
     q_lower = question.lower()
     for pattern, replacement in REPLACEMENTS:
         try:
             if re.search(pattern, q_lower):
-                return re.sub(pattern, replacement, q_lower, flags=re.IGNORECASE).capitalize()
+                result = re.sub(pattern, replacement, q_lower, flags=re.IGNORECASE)
+                return result[0].upper() + result[1:] if result else result
         except Exception:
             continue
-    return question
+    return tr(question)
+
+
+def _bar(percent: float, width: int = 10) -> str:
+    filled = max(0, min(width, int(round(percent / 100.0 * width))))
+    return "\u2588" * filled + "\u2591" * (width - filled)
 
 def format_polymarket_section(markets: List[Dict], max_items: int = 5) -> str:
     if not markets:
         return ""
-    text = "<b>🎲 Polymarket — мнение толпы (ФРС/крипта/войны):</b>\n"
+    text = "<b>🔮 Polymarket — что думает толпа</b>\n\n"
     for m in markets[:max_items]:
         question_ru = _translate_question(m["question"])
-        top_outcomes = sorted(m["outcomes"], key=lambda x: -x["probability"])[:2]
-        outcomes_str = " / ".join(f"{o['name']}: {o['probability']}%" for o in top_outcomes)
+        if not question_ru.endswith("?"):
+            question_ru += "?"
         if m["url"]:
-            text += f'• <a href="{m["url"]}">{question_ru}</a>\n'
+            text += f'<a href="{m["url"]}">{question_ru}</a>\n'
         else:
-            text += f"• {question_ru}\n"
-        text += f"  {outcomes_str}\n"
-    text += "\n"
+            text += f"{question_ru}\n"
+
+        top = sorted(m["outcomes"], key=lambda x: -x["probability"])[0]
+        pct = top["probability"]
+        text += f'<code>{_bar(pct)}</code> {_translate_outcome(top["name"])}: <b>{pct:.0f}%</b>\n\n'
     return text

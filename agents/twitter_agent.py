@@ -5,6 +5,7 @@ import re
 import time
 from bs4 import BeautifulSoup
 from agents.sentiment import detect_sentiment
+from agents.macro_agent import MACRO_ACCOUNTS, record_event as record_macro_event
 
 MIRRORS = ["https://xcancel.com", "https://nitter.net", "https://nitter.poast.org"]
 TIMEOUT = 8
@@ -170,12 +171,28 @@ def check_account(username, state):
         if coins:
             _record_sentiment(username, t["text"], coins)
             alerts.append({"username": username, "text": t["text"], "url": t["url"], "coins": coins})
+        else:
+            # Твит без монет всё равно может двигать рынок:
+            # Иран, нефть, ФРС, безработица, тарифы, пузырь ИИ.
+            try:
+                record_macro_event(username, t["text"], t["url"])
+            except Exception as e:
+                print("macro record error:", e)
     state[username] = tweets[0]["id"]
     return alerts
 
 
+def all_accounts():
+    """Крипто-аккаунты + макро-аккаунты, без дублей."""
+    merged = list(ACCOUNTS)
+    for u in MACRO_ACCOUNTS:
+        if u not in merged:
+            merged.append(u)
+    return merged
+
+
 def check_all_accounts(usernames=None):
-    usernames = usernames or ACCOUNTS
+    usernames = usernames or all_accounts()
     state = _load_state()
     all_alerts = []
     for u in usernames:

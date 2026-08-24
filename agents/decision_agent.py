@@ -1,5 +1,6 @@
 from agents.sentiment import detect_sentiment
 from agents.twitter_agent import get_recent_sentiment as get_twitter_sentiment
+from agents.macro_agent import get_macro_bias
 
 
 def _news_sentiment_for(symbol_base, news_list):
@@ -30,6 +31,17 @@ def enrich_signal(signal, symbol, news_list):
     nw = _news_sentiment_for(base, news_list)
     if nw:
         votes.append(("Новости", nw))
+
+    # Макро-фон: Иран, нефть, ФРС, безработица, тарифы.
+    # Крипта ходит за американским рынком риска, поэтому фон учитываем.
+    try:
+        macro = get_macro_bias()
+        if macro["bias"] == "risk_on":
+            votes.append(("Макро-фон", "bullish"))
+        elif macro["bias"] == "risk_off":
+            votes.append(("Макро-фон", "bearish"))
+    except Exception as e:
+        print("macro bias error:", e)
 
     agree = [name for name, v in votes if v == expected]
     conflict = [name for name, v in votes if v != expected]

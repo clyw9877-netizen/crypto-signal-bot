@@ -3,7 +3,7 @@ from config import COINS
 from agents.data_agent import get_candles, get_all_prices, get_24h_stats
 from agents.smc_agent import analyze_candles
 from agents.decision_agent import enrich_signal
-from agents.news_agent import get_crypto_news
+from agents.news_agent import get_crypto_news, get_forex_factory_events, format_digest
 
 import math
 
@@ -52,6 +52,7 @@ COIN_ALIASES = {
 
 MARKET_WORDS = ["рынок", "маркет", "market", "обстановка", "ситуация"]
 NEWS_WORDS = ["новост", "news"]
+DIGEST_WORDS = ["дайджест", "сводка", "сводку", "digest", "обзор дня", "что по рынку сегодня"]
 
 STOPWORDS = {"как", "рынок", "маркет", "что", "цена", "цены", "монета", "монету", "монеты",
              "по", "на", "за", "market", "price", "news", "новости", "и", "в", "у", "с", "из", "го"}
@@ -152,9 +153,31 @@ def _format_news_reply():
     return "\n".join(lines)
 
 
+def _format_digest_reply():
+    """Полный дайджест по запросу — то же, что уходит утром и вечером."""
+    from agents.data_agent import get_all_prices
+    try:
+        prices = get_all_prices(COINS)
+    except Exception:
+        prices = {}
+    try:
+        events = get_forex_factory_events()
+    except Exception:
+        events = []
+    try:
+        news = get_crypto_news()
+    except Exception:
+        news = []
+    return format_digest(prices, events, news,
+                         title="📊 Сводка по запросу", period_label="сегодня")
+
+
 def handle_message(text):
     if not text:
         return None
+    tl_early = text.lower()
+    if any(w in tl_early for w in DIGEST_WORDS):
+        return _format_digest_reply()
     symbol = _find_symbol_in_text(text)
     if symbol:
         return _format_coin_reply(symbol)

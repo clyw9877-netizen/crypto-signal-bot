@@ -4,6 +4,8 @@ from dateutil import parser as dateparser
 from typing import List, Dict
 from bs4 import BeautifulSoup
 from agents.polymarket_agent import get_crypto_markets, format_polymarket_section
+from agents.translate import tr
+from agents.macro_agent import format_macro_section
 
 TIMEOUT = 6
 FF_URLS = [
@@ -188,6 +190,27 @@ CLASS_RU = {
     "Extreme Greed": "Экстремальная жадность",
 }
 
+FNG_LABEL = [
+    (24, "😱 Крайний страх"),
+    (44, "😟 Страх"),
+    (55, "😐 Нейтрально"),
+    (74, "🤑 Жадность"),
+    (100, "🔥 Крайняя жадность"),
+]
+
+
+def _bar(percent, width=10):
+    filled = max(0, min(width, int(round(percent / 100.0 * width))))
+    return "\u2588" * filled + "\u2591" * (width - filled)
+
+
+def _fng_label(value):
+    for limit, label in FNG_LABEL:
+        if value <= limit:
+            return label
+    return ""
+
+
 def format_digest(prices, events, news, title="Утренний дайджест", period_label="Сегодня") -> str:
     fg = get_fear_greed()
     btc = prices.get("BTC-USDT", 0)
@@ -195,24 +218,33 @@ def format_digest(prices, events, news, title="Утренний дайджест
     sol = prices.get("SOL-USDT", 0)
     fg_class_ru = CLASS_RU.get(fg["classification"], fg["classification"])
 
-    text = f"📊 <b>{title}</b>\n"
-    text += f"{datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
-    text += f"<b>💰 Рынок:</b>\n"
-    text += f"BTC: ${btc:,.0f}\n"
-    text += f"ETH: ${eth:,.2f}\n"
-    text += f"SOL: ${sol:,.2f}\n"
-    text += f"Индекс страха/жадности: {fg['value']} ({fg_class_ru})\n\n"
+    text = f"<b>{title}</b>\n"
+    text += f"<i>{datetime.now().strftime('%d.%m.%Y  %H:%M')}</i>\n\n"
+    text += "<b>💰 Курсы</b>\n"
+    text += f"<code>BTC</code>  <b>${btc:,.0f}</b>\n"
+    text += f"<code>ETH</code>  <b>${eth:,.2f}</b>\n"
+    text += f"<code>SOL</code>  <b>${sol:,.2f}</b>\n\n"
+    text += "<b>🎭 Индекс страха и жадности</b>\n"
+    text += f"<code>{_bar(fg['value'])}</code> <b>{fg['value']}</b> — {_fng_label(fg['value'])}\n\n"
 
     if events:
-        text += f"<b>📅 Важные события для крипты ({period_label}):</b>\n"
+        text += f"<b>📅 Важные события ({period_label})</b>\n\n"
         for e in events[:5]:
             mark = "🔴" if e["impact"]=="High" else "🟡"
-            text += f'{mark} {e["time"]} — <b>{e["title"]}</b>\n'
+            text += f'{mark} <b>{e["time"]}</b> — <b>{tr(e["title"])}</b>\n'
             if e.get("explanation"):
-                text += f"   <i>{e['explanation']}</i>\n"
-        text += f'\n<a href="https://www.forexfactory.com/calendar">🔗 Полный календарь событий</a>\n\n'
+                text += f"<i>{e['explanation']}</i>\n"
+            text += "\n"
+        text += '<a href="https://www.forexfactory.com/calendar">🔗 Полный календарь событий</a>\n\n'
     else:
-        text += f"Сегодня нет важных событий, влияющих на крипторынок.\n\n"
+        text += "<b>📅 Календарь</b>\n<i>Важных событий по крипторынку сегодня нет</i>\n\n"
+
+    try:
+        macro_section = format_macro_section()
+        if macro_section:
+            text += macro_section
+    except Exception as e:
+        print("macro section error:", e)
 
     poly_markets = []
     try:
@@ -224,17 +256,19 @@ def format_digest(prices, events, news, title="Утренний дайджест
         text += poly_section
 
     if news:
-        text += "<b>📰 Новости:</b>\n"
+        text += "<b>📰 Новости</b>\n\n"
         for n in news[:4]:
             link = n.get("url","")
-            title_n = n["title"][:90]
+            title_n = tr(n["title"])[:120]
+            source = n.get("source","")
+            tail = f" <i>· {source}</i>" if source else ""
             if link:
-                text += f'• <a href="{link}">{title_n}</a>\n'
+                text += f'• <a href="{link}">{title_n}</a>{tail}\n'
             else:
-                text += f"• {title_n}\n"
+                text += f"• {title_n}{tail}\n"
         text += "\n"
 
-    text += "🤖 <i>Бот сканирует рынок каждые 5 минут...</i>"
+    text += "🤖 <i>Бот сканирует рынок каждые 5 минут</i>"
     return text
 
 def format_morning_digest(prices, events, news) -> str:
