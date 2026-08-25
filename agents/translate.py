@@ -23,6 +23,24 @@ TIMEOUT = 8
 _lock = threading.Lock()
 _cache = {}
 
+# Оба бесплатных движка (Google без ключа, MyMemory) регулярно отдают 429,
+# если бить в них без пауз — а именно так и происходило: за один дайджест
+# десятки строк переводились подряд без задержки. Держим минимум 1.5с
+# между ЛЮБЫМИ двумя исходящими запросами к переводчику, независимо от
+# того, какой движок и какая строка — это не гарантирует отсутствие 429
+# (лимиты не документированы официально), но должно ощутимо снизить частоту.
+_last_request_ts = 0.0
+MIN_REQUEST_INTERVAL = 1.5
+
+
+def _throttle():
+    global _last_request_ts
+    with _lock:
+        wait = MIN_REQUEST_INTERVAL - (time.time() - _last_request_ts)
+        if wait > 0:
+            time.sleep(wait)
+        _last_request_ts = time.time()
+
 try:
     with open(CACHE_PATH, encoding="utf-8") as f:
         _cache = json.load(f)
@@ -56,7 +74,7 @@ FIXES = [
     (r"\bперекупленн?ый RSI\b", "перекупленность по RSI"),
     (r"\bмедвежьей торговле\b", "на медвежьем рынке"),
     (r"\bбычьей торговле\b", "на бычьем рынке"),
-    (r"\bФедеральн(а�ратратска) етароварсца uny=+\w*", "ФРС"),
+    (r"\bФедеральн(ая|ой) резервн(ая|ой) систем\w*", "ФРС"),
     (r"\bФРС США\b", "ФРС"),
     (r"\bдоля рынка\b", "доминация"),
     (r"\s{2,}", " "),
@@ -64,11 +82,11 @@ FIXES = [
 
 
 def has_cyrillic(text: str) -> bool:
-    return bool(re.search(r"[а-яА-Яёс]", text or ""))
+    return bool(re.search(r"[а-яА-ЯёЁ]", text or ""))
 
 
 def _protect(text: str):
-    """Прячет тикеры под плейсхолдеры. Только целые слова и ??
+    """Прячет тикеры под плейсхолдеры. Только целые слова и только
     в том же регистре — иначе SEC ломает "Secretary", а ETH — "Hegseth"."""
     saved = {}
     for i, token in enumerate(PROTECT):
@@ -87,6 +105,7 @@ def _restore(text: str, saved: dict) -> str:
 
 
 def _google(text: str) -> str:
+    _throttle()
     r = requests.get(
         "https://translate.googleapis.com/translate_a/single",
         params={"client": "gtx", "sl": "en", "tl": "ru", "dt": "t", "q": text},
@@ -98,6 +117,7 @@ def _google(text: str) -> str:
 
 
 def _mymemory(text: str) -> str:
+    _throttle()
     r = requests.get(
         "https://api.mymemory.translated.net/get",
         params={"q": text[:490], "langpair": "en|ru"},
