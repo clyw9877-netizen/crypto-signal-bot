@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from agents.polymarket_agent import get_crypto_markets, format_polymarket_section
 from agents.translate import tr
 from agents.macro_agent import format_macro_section
+from agents.twitter_agent import get_failure_summary
 
 TIMEOUT = 6
 FF_URLS = [
@@ -245,6 +246,13 @@ def format_digest(prices, events, news, title="Утренний дайджест
             text += macro_section
     except Exception as e:
         print("macro section error:", e)
+
+    try:
+        fail = get_failure_summary()
+        if fail:
+            text += f"⚠️ <i>Twitter: {fail['failed_count']}/{fail['total']} аккаунтов недоступны (зеркала не отвечают)</i>\n\n"
+    except Exception as e:
+        print("twitter failure summary error:", e)
 
     poly_markets = []
     try:

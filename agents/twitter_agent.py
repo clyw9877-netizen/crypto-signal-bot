@@ -7,8 +7,20 @@ from bs4 import BeautifulSoup
 from agents.sentiment import detect_sentiment
 from agents.macro_agent import MACRO_ACCOUNTS, record_event as record_macro_event
 
-MIRRORS = ["https://xcancel.com", "https://nitter.net", "https://nitter.poast.org"]
-TIMEOUT = 8
+# Список зеркал собран по памяти — публичные nitter-инстансы очень нестабильны
+# и часто отключаются без предупреждения. Гарантии, что все живы, нет:
+# при добавлении новых стоит время от времени чистить мёртвые вручную.
+MIRRORS = [
+    "https://xcancel.com", "https://nitter.net", "https://nitter.poast.org",
+    "https://nitter.privacydev.net", "https://lightbrd.com",
+]
+# Таймаут снижен с 8 до 5 — иначе при добавлении зеркал худший случай
+# (все мертвы, все 27 аккаунтов) растягивается на 10+ минут и блокирует бота,
+# как это уже было с проверкой ссылок Polymarket.
+TIMEOUT = 5
+
+FAILURES_FILE = "data/twitter_failures.json"
+_last_fetch_ok = {}
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
 ACCOUNTS = [
@@ -86,9 +98,11 @@ def _fetch_profile_html(username):
         try:
             r = requests.get(f"{base}/{username}", headers={"User-Agent": UA}, timeout=TIMEOUT)
             if r.status_code == 200 and "timeline-item" in r.text:
+                _last_fetch_ok[username] = True
                 return r.text, base
         except Exception:
             continue
+    _last_fetch_ok[username] = False
     return None, None
 
 
@@ -195,13 +209,30 @@ def check_all_accounts(usernames=None):
     usernames = usernames or all_accounts()
     state = _load_state()
     all_alerts = []
+    _last_fetch_ok.clear()
     for u in usernames:
         try:
             all_alerts.extend(check_account(u, state))
         except Exception as e:
             print(f"Twitter monitor error for {u}:", e)
     _save_state(state)
+
+    failed = [u for u in usernames if _last_fetch_ok.get(u) is False]
+    _save_json(FAILURES_FILE, {
+        "total": len(usernames),
+        "failed": failed,
+        "ts": time.time(),
+    })
     return all_alerts
+
+
+def get_failure_summary():
+    """Сколько аккаунтов не удалось проверить на последнем проходе.
+    Возвращает None, если проверок ещё не было или все прошли успешно."""
+    data = _load_json(FAILURES_FILE)
+    if not data or not data.get("failed"):
+        return None
+    return {"total": data.get("total", 0), "failed_count": len(data["failed"])}
 
 
 def format_alert(alert):
