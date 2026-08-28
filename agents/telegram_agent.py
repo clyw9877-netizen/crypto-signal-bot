@@ -53,6 +53,7 @@ def send_signal(signal, chart_bytes, news_text=""):
     entry = s.get("price", 0)
     sl = s.get("sl", 0)
     tp = s.get("tp", 0)
+    tps = s.get("tps") or ([tp] if tp else [])
     rr = s.get("rr", 0)
     rsi = s.get("rsi", 50)
     reasons = s.get("reasons", [])
@@ -75,7 +76,11 @@ def send_signal(signal, chart_bytes, news_text=""):
     caption = f"<b>{s.get('symbol','')} — {dir_text}</b> {confidence_emoji} {confidence}%\n\n"
     caption += f"Вход: <b>${format_price(entry)}</b>\n"
     caption += f"SL: <b>${format_price(sl)}</b>\n"
-    caption += f"TP: <b>${format_price(tp)}</b>\n"
+    if len(tps) > 1:
+        for i, level in enumerate(tps):
+            caption += f"TP{i+1}: <b>${format_price(level)}</b>\n"
+    else:
+        caption += f"TP: <b>${format_price(tp)}</b>\n"
     caption += f"📊 RR: <b>1:{rr:.1f}</b>\n"
     caption += f"📈 RSI: <b>{rsi:.0f}</b>\n\n"
     if reasons_ru:

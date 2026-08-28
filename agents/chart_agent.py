@@ -24,16 +24,22 @@ def draw_signal_chart(symbol, candles, signal, save_path=None):
     entry = signal.get('price', current_price)
     sl = signal.get('sl', 0)
     tp = signal.get('tp', 0)
+    tps = signal.get('tps') or ([tp] if tp else [])
     confidence = signal.get('confidence', 0)
     direction = signal.get('signal', 'long')
     if sl: ax.hlines(sl, n-15, n+3, colors='#ff0055', linewidths=2, linestyles='--', alpha=0.9, zorder=5)
-    if tp: ax.hlines(tp, n-15, n+3, colors='#00ff88', linewidths=2, linestyles='--', alpha=0.9, zorder=5)
+    # Каждый следующий тейк рисуется чуть прозрачнее — так первый (самый надёжный,
+    # ближайший к реальному уровню) визуально выделяется на графике.
+    for i, level in enumerate(tps):
+        alpha = max(0.35, 0.9 - i * 0.15)
+        ax.hlines(level, n-15, n+3, colors='#00ff88', linewidths=2, linestyles='--', alpha=alpha, zorder=5)
     ax.hlines(entry, n-15, n+3, colors='#aa66ff', linewidths=2, linestyles='-', alpha=0.9, zorder=5)
     ax.hlines(current_price, 0, n, colors='#ffffff', linewidths=0.8, alpha=0.3)
     rr = signal.get('rr', 0)
     rsi = signal.get('rsi', 50)
     dir_text = "ЛОНГ" if direction == 'long' else "ШОРТ"
-    info = "Сигнал: " + symbol + " " + dir_text + "\nУверенность: " + str(confidence) + "%\nВход: $" + str(round(entry,2)) + "\nSL: $" + str(round(sl,2)) + "\nTP: $" + str(round(tp,2)) + "\nRR: 1:" + str(round(rr,1)) + "\nRSI: " + str(round(rsi))
+    tp_lines = "\n".join(f"TP{i+1}: ${round(t,2)}" for i, t in enumerate(tps)) if tps else f"TP: ${round(tp,2)}"
+    info = "Сигнал: " + symbol + " " + dir_text + "\nУверенность: " + str(confidence) + "%\nВход: $" + str(round(entry,2)) + "\nSL: $" + str(round(sl,2)) + "\n" + tp_lines + "\nRR: 1:" + str(round(rr,1)) + "\nRSI: " + str(round(rsi))
     props = dict(boxstyle='round', facecolor='#0a1520', alpha=0.95, edgecolor='#aa66ff', linewidth=1.5)
     ax.text(2, ax.get_ylim()[1] if ax.get_ylim()[1] else current_price*1.02, info, fontsize=9, color='#c0d8f0', verticalalignment='top', bbox=props, fontfamily='monospace', zorder=10)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x,p: '$'+'{:,.0f}'.format(x)))
