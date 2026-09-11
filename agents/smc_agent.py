@@ -77,74 +77,58 @@ def _wave_len(a, b):
     return abs(b["price"] - a["price"])
 
 
-def classify_impulse(swings):
-    if len(swings) < 6:
+DONCHIAN = 20
+
+
+def donchian_channel(candles, n=DONCHIAN, offset=1):
+    """Верхний/нижний уровень канала — та же логика, что в личном скринере
+    пробоев. offset=1 исключает текущую свечу, чтобы уровень был реальным
+    прошлым уровнем, а не включал саму пробойную свечу."""
+    window = candles[-(n + offset):-offset] if offset else candles[-n:]
+    if len(window) < n:
+        return None, None
+    return max(c["high"] for c in window), min(c["low"] for c in window)
+
+
+def _body_ratio(c):
+    rng = c["high"] - c["low"]
+    return abs(c["close"] - c["open"]) / rng if rng else 0.0
+
+
+def _avg_volume(candles, n=20):
+    vols = [c.get("volume", 0) for c in candles[-n - 1:-1]]
+    if not vols or sum(vols) == 0:
         return None
-    pts = swings[-6:]
-    types = [p["type"] for p in pts]
+    return sum(vols) / len(vols)
 
-    if types == ["low", "high", "low", "high", "low", "high"]:
-        direction = "bullish"
-    elif types == ["high", "low", "high", "low", "high", "low"]:
-        direction = "bearish"
-    else:
+
+def classify_breakout(candles):
+    """Пробой уровня — как в личном скринере пробоев (core.py).
+    Ищем только СВЕЖИЙ пробой: цена только что вышла за канал Дончиана,
+    с подтверждением объёмом (если объём известен) и сильным телом свечи.
+    Монеты, которые просто подходят к уровню ("watch" в терминологии
+    скринера), сигнала не дают — только реальный пробой."""
+    if len(candles) < DONCHIAN + 5:
+        return None
+    last = candles[-1]
+    close = last["close"]
+    hi, lo = donchian_channel(candles)
+    if hi is None or hi <= 0 or lo <= 0:
         return None
 
-    p0, p1, p2, p3, p4, p5 = pts
-    w1 = _wave_len(p0, p1)
-    w3 = _wave_len(p2, p3)
-    w5 = _wave_len(p4, p5)
+    dist_hi = (close / hi - 1) * 100
+    dist_lo = (close / lo - 1) * 100
+    body = _body_ratio(last)
 
-    if direction == "bullish":
-        if p2["price"] <= p0["price"]:
-            return None
-        if w3 < w1 and w3 < w5:
-            return None
-        if p4["price"] <= p1["price"]:
-            return None
-    else:
-        if p2["price"] >= p0["price"]:
-            return None
-        if w3 < w1 and w3 < w5:
-            return None
-        if p4["price"] >= p1["price"]:
-            return None
+    avg_vol = _avg_volume(candles)
+    rvol = (last.get("volume", 0) / avg_vol) if avg_vol else None
+    vol_ok = (rvol > 1.8) if rvol is not None else True
 
-    return {
-        "direction": direction,
-        "points": pts,
-        "wave3_extended": w3 > w1 and w3 > w5,
-        "wave5_extended": w5 > w3,
-        "w1": w1, "w3": w3, "w5": w5,
-    }
-
-
-def classify_correction(swings):
-    if len(swings) < 9:
-        return None
-    impulse = classify_impulse(swings[-9:-3])
-    if not impulse:
-        return None
-    pts = swings[-3:]
-    types = [p["type"] for p in pts]
-    p5 = impulse["points"][-1]
-
-    if impulse["direction"] == "bullish":
-        if types != ["low", "high", "low"]:
-            return None
-        c = pts[-1]
-        retrace = (p5["price"] - c["price"]) / impulse["w5"] if impulse["w5"] else 0
-        if not (0.382 <= retrace <= 1.0):
-            return None
-        return {"trend_direction": "bullish", "impulse": impulse, "points": pts, "retrace": retrace}
-    else:
-        if types != ["high", "low", "high"]:
-            return None
-        c = pts[-1]
-        retrace = (c["price"] - p5["price"]) / impulse["w5"] if impulse["w5"] else 0
-        if not (0.382 <= retrace <= 1.0):
-            return None
-        return {"trend_direction": "bearish", "impulse": impulse, "points": pts, "retrace": retrace}
+    if 0.05 < dist_hi < 1.2 and vol_ok and body > 0.55:
+        return {"direction": "long", "level": hi, "rvol": rvol, "body": body, "dist": dist_hi}
+    if -1.2 < dist_lo < -0.05 and vol_ok and body > 0.55:
+        return {"direction": "short", "level": lo, "rvol": rvol, "body": body, "dist": dist_lo}
+    return None
 
 
 def _fib_extension_levels(direction, entry, leg_len, ratios=(1.0, 1.272, 1.618, 2.0)):
@@ -219,57 +203,46 @@ def analyze_candles(symbol, candles):
     current_price = candles[-1]["close"]
     rsi = calc_rsi(candles)
     atr = calc_atr(candles)
-    swings = find_swings(candles, threshold_pct=2.0)
+    swings = find_swings(candles)
 
-    direction = None
-    confidence = 0
-    reasons = []
-    invalidation = None
-
-    correction = classify_correction(swings)
-    impulse = None if correction else classify_impulse(swings)
-
-    if correction:
-        direction = "long" if correction["trend_direction"] == "bullish" else "short"
-        confidence = 60
-        reasons.append(f"Коррекция ABC завершена ({correction['retrace']*100:.0f}% от волны 5)")
-        invalidation = correction["points"][-1]["price"]
-        if 0.5 <= correction["retrace"] <= 0.618:
-            confidence += 15
-            reasons.append("Откат в зоне Фибо 50-61.8%")
-    elif impulse:
-        direction = "long" if impulse["direction"] == "bullish" else "short"
-        if impulse.get("wave3_extended") or not impulse.get("wave5_extended"):
-            confidence = 55
-            reasons.append("Импульс: волна 3 или ранняя волна 5")
-        else:
-            confidence = 40
-            reasons.append("Волна 5 растянута — риск разворота")
-        invalidation = impulse["points"][-2]["price"]
-
-    if direction is None:
+    breakout = classify_breakout(candles)
+    if not breakout:
         return {"signal": "none", "confidence": 0}
 
-    if direction == "long" and rsi < 45:
-        confidence += 10
-        reasons.append(f"RSI поддерживает вход ({rsi:.0f})")
-    elif direction == "short" and rsi > 55:
-        confidence += 10
-        reasons.append(f"RSI поддерживает вход ({rsi:.0f})")
+    direction = breakout["direction"]
+    level = breakout["level"]
+    confidence = 50
+    reasons = []
 
-    if confidence < 50 or not invalidation:
-        return {"signal": "none", "confidence": confidence}
-
-    buffer = atr * 0.3
-    max_distance = atr * 6
     if direction == "long":
-        sl = invalidation - buffer
-        if sl >= current_price or (current_price - sl) > max_distance:
-            sl = current_price - atr * 2
+        reasons.append(f"Пробой уровня сопротивления ${level:.4g}")
     else:
-        sl = invalidation + buffer
-        if sl <= current_price or (sl - current_price) > max_distance:
-            sl = current_price + atr * 2
+        reasons.append(f"Пробой уровня поддержки ${level:.4g}")
+
+    if breakout["rvol"] is not None:
+        confidence += max(0, min(20, int((breakout["rvol"] - 1) * 10)))
+        reasons.append(f"Объём {breakout['rvol']:.1f}x от среднего")
+
+    if breakout["body"] > 0.7:
+        confidence += 10
+        reasons.append("Сильное тело пробойной свечи")
+
+    if direction == "long" and rsi < 70:
+        confidence += 5
+    elif direction == "short" and rsi > 30:
+        confidence += 5
+
+    # Стоп — чуть за пробитым уровнем: для лонга он теперь опора (поддержка),
+    # для шорта — сопротивление сверху. Буфер на ATR, чтобы не выбивало шумом.
+    buffer = atr * 0.3
+    if direction == "long":
+        sl = level - buffer
+        if sl >= current_price:
+            sl = current_price - atr * 1.5
+    else:
+        sl = level + buffer
+        if sl <= current_price:
+            sl = current_price + atr * 1.5
 
     tps = calc_take_profits(direction, current_price, sl, swings, atr=atr)
     if not tps:
