@@ -6,11 +6,11 @@ from agents.decision_agent import enrich_signal
 from agents.chart_agent import draw_signal_chart
 from agents.news_agent import get_crypto_news, get_forex_factory_events, check_high_impact_now, format_morning_digest, format_evening_digest, format_signal_news
 from agents.portfolio_agent import load_portfolio, open_position, check_positions, format_position_opened, format_position_closed, get_portfolio_stats, get_trade_journal
+from agents.ai_review_agent import review_signal, analyze_trade_outcome, save_lesson
 from agents.telegram_agent import send_message, send_photo, test_connection, send_signal, get_new_messages
 from agents.twitter_agent import check_all_accounts, format_alert
 from agents.chat_agent import handle_message
 from agents.coinmarketcap_agent import get_global_metrics, format_market_overview
-from agents.coingecko_agent import get_top_movers, format_top_movers
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
 log = logging.getLogger(__name__)
@@ -39,7 +39,15 @@ def scan_market():
     closed = safe(lambda: check_positions(prices), "check_positions", [])
     for pos in closed:
         p = load_portfolio()
-        send_message(format_position_closed(pos, p["deposit"]))
+        # ИИ-разбор закрытой сделки — почему сработало/не сработало, и урок
+        # на будущее. Без ключа ANTHROPIC_API_KEY просто вернёт None.
+        lesson = safe(lambda pos=pos: analyze_trade_outcome(pos), "ai_trade_analysis", None)
+        if lesson:
+            save_lesson(pos["symbol"], pos["direction"], pos["result"], lesson)
+        msg = format_position_closed(pos, p["deposit"])
+        if lesson:
+            msg += f"\n\n🧠 <i>{lesson}</i>"
+        send_message(msg)
     if closed:
         log.info(f"Closed {len(closed)} positions")
     news = safe(get_crypto_news, "get_crypto_news", [])
@@ -64,11 +72,26 @@ def scan_market():
         try:
             port = load_portfolio()
             if len(port["open_positions"]) < 3:
+                # ИИ-проверка перед входом: может отклонить сигнал целиком или
+                # слегка поправить SL/TP/уверенность. Без ключа — пропускает
+                # сигнал без изменений (approve=True).
+                try:
+                    signal, approved, ai_reason = review_signal(signal)
+                except Exception as e:
+                    log.error(f"AI review failed for {symbol}: {e}")
+                    approved, ai_reason = True, None
+                if not approved:
+                    log.info(f"AI REJECTED signal {symbol}: {ai_reason}")
+                    sent_signals.add(key)
+                    continue
                 pos = open_position(signal)
                 chart = draw_signal_chart(symbol, candles, signal)
                 related = [n for n in news if symbol.split("-")[0] in n.get("currencies",[])]
                 send_signal(signal, chart, format_signal_news(signal, related))
-                send_message(format_position_opened(pos))
+                opened_msg = format_position_opened(pos)
+                if ai_reason:
+                    opened_msg += f"\n🧠 <i>{ai_reason}</i>"
+                send_message(opened_msg)
                 sent_signals.add(key)
                 time.sleep(2)
         except Exception as e:
@@ -89,10 +112,6 @@ def send_digest(kind: str):
     cm_text = format_market_overview(cm_metrics)
     if cm_text:
         send_message(cm_text)
-    movers = safe(get_top_movers, "coingecko_movers", None)
-    movers_text = format_top_movers(movers)
-    if movers_text:
-        send_message(movers_text)
     if kind == "pacific_evening":
         journal = safe(get_trade_journal, "trade_journal", None)
         if journal:
