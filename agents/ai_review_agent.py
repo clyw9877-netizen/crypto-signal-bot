@@ -97,13 +97,8 @@ def _save_lessons(lessons):
         pass
 
 
-def get_recent_lessons(symbol=None, limit=MAX_LESSONS_IN_PROMPT):
+def get_recent_lessons(limit=MAX_LESSONS_IN_PROMPT):
     lessons = _load_lessons()
-    if symbol:
-        base = symbol.split("-")[0]
-        matched = [l for l in lessons if l.get("symbol", "").split("-")[0] == base]
-        if matched:
-            lessons = matched
     return lessons[-limit:]
 
 
@@ -128,7 +123,7 @@ def review_signal(signal):
     if not _api_key():
         return signal, True, None
 
-    lessons = get_recent_lessons(signal.get("symbol"))
+        lessons = get_recent_lessons()
     lessons_text = "\n".join(f"- {l['lesson']}" for l in lessons) if lessons else "Уроков по этой монете ещё нет."
 
     system = (
