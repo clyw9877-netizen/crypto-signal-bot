@@ -31,9 +31,15 @@ def calc_liquidation_price(entry: float, leverage: float, direction: str) -> flo
 
 def open_position(signal: Dict) -> Optional[Dict]:
     portfolio = load_portfolio()
+        if any(p["symbol"] == signal.get("symbol") for p in portfolio["open_positions"]):
+                    return None
     deposit = portfolio["deposit"]
+            used_margin = sum(p["size"] for p in portfolio["open_positions"])
+    free_margin = deposit - used_margin
+    if free_margin <= 10:
+                return None
     confidence = signal.get("confidence", 50)
-    size, leverage = get_position_size(deposit, confidence)
+        size, leverage = get_position_size(free_margin, confidence)
     fee_open = size * leverage * BINGX_FEE
     liquidation = calc_liquidation_price(signal["price"], leverage, signal["signal"])
     position = {"liquidation":liquidation,"id":len(portfolio["trades"])+1,"symbol":signal["symbol"],"direction":signal["signal"],"entry_price":signal["price"],"sl":signal["sl"],"tp":signal["tp"],"size":size,"leverage":leverage,"fee_open":fee_open,"confidence":confidence,"reasons":signal.get("reasons",[]),"opened_at":datetime.now().isoformat(),"status":"open"}
