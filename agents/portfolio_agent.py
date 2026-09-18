@@ -42,7 +42,7 @@ def open_position(signal: Dict) -> Optional[Dict]:
     size, leverage = get_position_size(free_margin, confidence)
     fee_open = size * leverage * BINGX_FEE
     liquidation = calc_liquidation_price(signal["price"], leverage, signal["signal"])
-    position = {"liquidation":liquidation,"id":len(portfolio["trades"])+1,"symbol":signal["symbol"],"direction":signal["signal"],"entry_price":signal["price"],"sl":signal["sl"],"tp":signal["tp"],"size":size,"leverage":leverage,"fee_open":fee_open,"confidence":confidence,"reasons":signal.get("reasons",[]),"opened_at":datetime.now().isoformat(),"status":"open"}
+    position = {"liquidation":liquidation,"id":len(portfolio["trades"])+1,"symbol":signal["symbol"],"direction":signal["signal"],"entry_price":signal["price"],"sl":signal["sl"],"tp":signal["tp"],"size":size,"leverage":leverage,"fee_open":fee_open,"confidence":confidence,"reasons":signal.get("reasons",[]),"opened_at":datetime.now().isoformat(),"status":"open","tps":signal.get("tps",[signal["tp"]]),"tp_index":0,"breakeven":False}
     portfolio["open_positions"].append(position)
     save_portfolio(portfolio)
     return position
@@ -60,15 +60,17 @@ def check_positions(current_prices: Dict) -> List[Dict]:
         direction = pos["direction"]
         sl = pos["sl"]
         tp = pos["tp"]
+        tps = pos.get("tps", [tp])
+        tp_index = pos.get("tp_index", 0)
         hit_sl = current_price <= sl if direction == "long" else current_price >= sl
         hit_tp = current_price >= tp if direction == "long" else current_price <= tp
-        if hit_sl or hit_tp:
-            close_price = sl if hit_sl else tp
+        if hit_sl:
+            close_price = sl
             pnl_pct = (close_price - pos["entry_price"]) / pos["entry_price"] if direction == "long" else (pos["entry_price"] - close_price) / pos["entry_price"]
             gross_pnl = pos["size"] * pos["leverage"] * pnl_pct
             fee_close = pos["size"] * pos["leverage"] * BINGX_FEE
             net_pnl = gross_pnl - pos["fee_open"] - fee_close
-            pos.update({"close_price":close_price,"gross_pnl":gross_pnl,"fee_close":fee_close,"net_pnl":net_pnl,"closed_at":datetime.now().isoformat(),"result":"win" if net_pnl > 0 else "loss","hit_sl":hit_sl,"hit_tp":hit_tp,"status":"closed"})
+            pos.update({"close_price":close_price,"gross_pnl":gross_pnl,"fee_close":fee_close,"net_pnl":net_pnl,"closed_at":datetime.now().isoformat(),"result":"win" if net_pnl > 0 else "loss","hit_sl":True,"hit_tp":False,"status":"closed"})
             portfolio["deposit"] += net_pnl
             portfolio["total_trades"] += 1
             portfolio["total_pnl"] += net_pnl
@@ -76,6 +78,28 @@ def check_positions(current_prices: Dict) -> List[Dict]:
             else: portfolio["losses"] += 1
             portfolio["trades"].append(pos)
             closed.append(pos)
+        elif hit_tp:
+            next_tp_index = tp_index + 1
+            is_last_tp = next_tp_index >= len(tps)
+            if is_last_tp:
+                close_price = tp
+                pnl_pct = (close_price - pos["entry_price"]) / pos["entry_price"] if direction == "long" else (pos["entry_price"] - close_price) / pos["entry_price"]
+                gross_pnl = pos["size"] * pos["leverage"] * pnl_pct
+                fee_close = pos["size"] * pos["leverage"] * BINGX_FEE
+                net_pnl = gross_pnl - pos["fee_open"] - fee_close
+                pos.update({"close_price":close_price,"gross_pnl":gross_pnl,"fee_close":fee_close,"net_pnl":net_pnl,"closed_at":datetime.now().isoformat(),"result":"win","hit_sl":False,"hit_tp":True,"status":"closed"})
+                portfolio["deposit"] += net_pnl
+                portfolio["total_trades"] += 1
+                portfolio["total_pnl"] += net_pnl
+                portfolio["wins"] += 1
+                portfolio["trades"].append(pos)
+                closed.append(pos)
+            else:
+                pos["sl"] = pos["entry_price"]
+                pos["tp"] = tps[next_tp_index]
+                pos["tp_index"] = next_tp_index
+                pos["breakeven"] = True
+                still_open.append(pos)
         else:
             still_open.append(pos)
     portfolio["open_positions"] = still_open
@@ -98,11 +122,13 @@ def format_position_opened(pos: Dict) -> str:
     if liq:
         liq_danger = liq >= pos["sl"] if pos["direction"] == "long" else liq <= pos["sl"]
     liq_line = f"Ликвидация: ${_format_price(liq)}" + (" ⚠️ БЛИЖЕ СТОПА!" if liq_danger else "") + "\n" if liq else ""
+    tps_list = pos.get("tps", [pos["tp"]])
+    tp_lines = "\n".join(f"  TP{i+1}: ${_format_price(t)}" for i, t in enumerate(tps_list))
     return (f"<b>✅ Позиция открыта #{pos['id']}</b>\n"
             f"{pos['symbol']} {dir_text}\n"
             f"Вход: ${_format_price(pos['entry_price'])}\n"
             f"SL: ${_format_price(pos['sl'])}\n"
-            f"TP: ${_format_price(pos['tp'])}\n"
+            f"Тейки:\n{tp_lines}\n"
             f"{liq_line}"
             f"Плечо: x{pos['leverage']}\n"
             f"Размер позиции: ${pos['size']:,.2f}\n"
