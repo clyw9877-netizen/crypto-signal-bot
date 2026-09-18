@@ -122,7 +122,7 @@ def classify_breakout(candles):
 
     avg_vol = _avg_volume(candles)
     rvol = (last.get("volume", 0) / avg_vol) if avg_vol else None
-    vol_ok = (rvol > 1.8) if rvol is not None else True
+    vol_ok = (rvol > 2.5) if rvol is not None else True
 
     if 0.05 < dist_hi < 1.2 and vol_ok and body > 0.55:
         return {"direction": "long", "level": hi, "rvol": rvol, "body": body, "dist": dist_hi}
@@ -177,7 +177,7 @@ def calc_take_profits(direction, entry, sl, swings, max_levels=5, min_gap_mult=0
         if leg_len > 0:
             candidates.extend(_fib_extension_levels(direction, entry, leg_len))
 
-    min_first_dist = risk * 0.5
+    min_first_dist = risk * 1.8
     if direction == "long":
         candidates = [c for c in candidates if c - entry >= min_first_dist]
         candidates.sort()
@@ -192,7 +192,7 @@ def calc_take_profits(direction, entry, sl, swings, max_levels=5, min_gap_mult=0
 
     levels = merged[:max_levels]
     if not levels:
-        levels = [entry + risk * 2] if direction == "long" else [entry - risk * 2]
+        levels = [entry + risk * 2.5] if direction == "long" else [entry - risk * 2.5]
     return levels
 
 
@@ -250,6 +250,8 @@ def analyze_candles(symbol, candles):
     tp = tps[0]  # ближайший, самый надёжный — по нему считается RR и закрытие бумажной позиции
 
     rr = abs(tp - current_price) / abs(sl - current_price)
+    if rr < 1.5:
+        return {"signal": "none", "confidence": confidence}
     return {
         "signal": direction,
         "confidence": min(int(confidence), 99),
