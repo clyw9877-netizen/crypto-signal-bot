@@ -100,6 +100,11 @@ def check_positions(current_prices: Dict) -> List[Dict]:
                 pos["tp_index"] = next_tp_index
                 pos["breakeven"] = True
                 still_open.append(pos)
+                try:
+                    from agents.telegram_agent import send_message as _send
+                    _send(f"\U0001F3AF <b>TP{tp_index+1} достигнут!</b> #{pos['id']} {pos['symbol']}\nЦена: {current_price:.4f}\n✅ Стоп → безубыток: {pos['entry_price']:.4f}\nСлед. цель: <b>TP{next_tp_index+1}</b> → {tps[next_tp_index]:.4f}")
+                except Exception:
+                    pass
         else:
             still_open.append(pos)
     portfolio["open_positions"] = still_open
