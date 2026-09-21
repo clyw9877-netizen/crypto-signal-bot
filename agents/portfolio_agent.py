@@ -137,7 +137,8 @@ def format_position_opened(pos: Dict) -> str:
             f"{liq_line}"
             f"Плечо: x{pos['leverage']}\n"
             f"Размер позиции: ${pos['size']:,.2f}\n"
-            f"Уверенность: {pos['confidence']}%")
+            f"Уверенность: {pos['confidence']}%\n"
+            f"⚡ Плечо: x{pos['leverage']}")
 
 def format_position_closed(pos: Dict, new_deposit: float) -> str:
     p = load_portfolio()
@@ -149,7 +150,8 @@ def format_position_closed(pos: Dict, new_deposit: float) -> str:
             f"Сработал: {trigger} по цене ${pos.get('close_price',0):,.2f}\n"
             f"Прибыль/убыток: ${pos.get('net_pnl',0):,.2f}\n"
             f"Депозит сейчас: ${new_deposit:,.2f}\n"
-            f"Винрейт: {round(wr)}%")
+            f"Винрейт: {round(wr)}%\n"
+            f"⚡ Плечо: x{pos.get('leverage', '?')}")
 
 def get_portfolio_stats() -> str:
     p = load_portfolio()
