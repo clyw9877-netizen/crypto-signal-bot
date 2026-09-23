@@ -95,7 +95,8 @@ def check_positions(current_prices: Dict) -> List[Dict]:
                 portfolio["trades"].append(pos)
                 closed.append(pos)
             else:
-                pos["sl"] = pos["entry_price"]
+                # TP1 → стоп в безубыток (вход), TP2+ → стоп на предыдущий TP
+                pos["sl"] = pos["entry_price"] if tp_index == 0 else tps[tp_index - 1]
                 pos["tp"] = tps[next_tp_index]
                 pos["tp_index"] = next_tp_index
                 pos["breakeven"] = True
