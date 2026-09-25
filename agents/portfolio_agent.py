@@ -105,7 +105,7 @@ def check_positions(current_prices: Dict) -> List[Dict]:
                     from agents.telegram_agent import send_message as _send
                     new_sl_val = pos["entry_price"] if tp_index == 0 else tps[tp_index - 1]
                     sl_desc = "безубыток" if tp_index == 0 else f"TP{tp_index}"
-                    _send(f"\U0001F3AF <b>TP{tp_index+1} достигнут!</b> #{pos['id']} {pos['symbol']}\nЦена: {current_price:.4f}\n✅ Стоп → {sl_desc}: {new_sl_val:.4f}\nСлед. цель: <b>TP{next_tp_index+1}</b> → {tps[next_tp_index]:.4f}")
+                    _send(f"\U0001F3AF <b>TP{tp_index+1} достигнут!</b> #{pos['id']} {pos['symbol']}\nTP{tp_index+1} пробит: {tp:.4f}\nЦена сейчас: {current_price:.4f}\n✅ Стоп → {sl_desc}: {new_sl_val:.4f}\nСлед. цель: <b>TP{next_tp_index+1}</b> → {tps[next_tp_index]:.4f}")
                 except Exception:
                     pass
         else:
