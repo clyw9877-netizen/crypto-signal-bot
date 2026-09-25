@@ -80,6 +80,7 @@ def scan_market():
                 except Exception as e:
                     log.error(f"AI review failed for {symbol}: {e}")
                     approved, ai_reason = True, None
+                    send_message(f"⚠️ ИИ недоступен, вхожу без проверки: {symbol}")
                 if not approved:
                     log.info(f"AI REJECTED signal {symbol}: {ai_reason}")
                     sent_signals.add(key)
