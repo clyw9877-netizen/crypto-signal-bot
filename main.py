@@ -139,6 +139,30 @@ def check_twitter():
         log.error(f"Twitter monitor failed: {e}")
 
 
+def monitor_positions():
+    """Проверка открытых позиций каждые 30 секунд — быстрое срабатывание TP/SL."""
+    try:
+        port = load_portfolio()
+        if not port["open_positions"]:
+            return
+        symbols = [p["symbol"] for p in port["open_positions"]]
+        prices = safe(lambda: get_all_prices(symbols), "monitor_prices", {})
+        if not prices:
+            return
+        closed = check_positions(prices)
+        for pos in closed:
+            msg = format_position_closed(pos, load_portfolio()["deposit"])
+            send_message(msg)
+            try:
+                from agents.ai_review_agent import analyze_trade_outcome, save_lesson
+                lesson = analyze_trade_outcome(pos)
+                if lesson:
+                    save_lesson(pos["symbol"], pos["direction"], pos["result"], lesson)
+            except Exception:
+                pass
+    except Exception as e:
+        log.error(f"monitor_positions: {e}")
+
 def main():
     log.info("Starting Crypto Signal Bot...")
     os.makedirs("data", exist_ok=True)
@@ -150,6 +174,7 @@ def main():
 
 
     schedule.every(SCAN_INTERVAL).seconds.do(scan_market)
+    schedule.every(30).seconds.do(monitor_positions)
     schedule.every(2).minutes.do(check_twitter)
     schedule.every(10).seconds.do(check_chat_questions)
     schedule.every().day.at(SCHEDULE_UTC["pacific_morning"]).do(lambda: send_digest("pacific_morning"))
