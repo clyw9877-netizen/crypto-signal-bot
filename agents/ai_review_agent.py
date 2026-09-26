@@ -123,7 +123,7 @@ def review_signal(signal):
     if not _api_key():
         return signal, True, None
 
-        lessons = get_recent_lessons()
+    lessons = get_recent_lessons()
     lessons_text = "\n".join(f"- {l['lesson']}" for l in lessons) if lessons else "Уроков по этой монете ещё нет."
 
     system = (
