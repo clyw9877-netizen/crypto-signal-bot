@@ -85,6 +85,8 @@ def scan_market():
                     log.info(f"AI REJECTED signal {symbol}: {ai_reason}")
                     sent_signals.add(key)
                     continue
+                if ai_reason:
+                    send_message(f"\U0001F916 <b>ИИ проверил и одобрил вход</b> {symbol}\n\U0001F4AC {ai_reason}")
                 pos = open_position(signal)
                 chart = draw_signal_chart(symbol, candles, signal)
                 related = [n for n in news if symbol.split("-")[0] in n.get("currencies",[])]
