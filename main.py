@@ -21,46 +21,49 @@ SCHEDULE_UTC = {
     "pacific_evening": "05:00",
 }
 
-
-def is_safe_to_trade() -> bool:
-    """Проверяет можно ли сейчас открывать новые позиции по сессиям и выходным."""
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
-    weekday = now.weekday()  # 0=пн ... 5=сб, 6=вс
-    hour = now.hour
-    minute = now.minute
-    total_min = hour * 60 + minute
-
-    # Выходные
-    if weekday >= 5:
-        log.info(f"Weekend — skipping trade")
-        send_message(f"\U0001F634 Выходной ({['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][weekday]}), новые сделки не открываю")
-        return False
-
-    # Опасные окна ±15 мин вокруг открытия сессий (UTC)
-    # Токио 00:00, Лондон 08:00, Нью-Йорк 13:30
-    dangerous = False
-    session_name = ""
-    if total_min >= 23*60+45 or total_min <= 15:
-        dangerous, session_name = True, "Токийской"
-    elif 7*60+45 <= total_min <= 8*60+15:
-        dangerous, session_name = True, "Лондонской"
-    elif 13*60+15 <= total_min <= 13*60+45:
-        dangerous, session_name = True, "Нью-Йоркской"
-
-    if dangerous:
-        log.info(f"Dangerous session window: {session_name}")
-        send_message(f"\u23F0 Открытие {session_name} сессии — пропускаю вход (риск разворота)")
-        return False
-
-    return True
-
 def safe(fn, name, default=None):
     try:
         return fn()
     except Exception as e:
         log.error(f"{name} failed: {e}")
         return default
+
+def is_safe_to_trade(signal=None):
+    """Проверяет можно ли открывать новые позиции по сессиям и дням недели."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    weekday = now.weekday()  # 0=пн, 5=сб, 6=вс
+    total_min = now.hour * 60 + now.minute
+    days = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс']
+
+    # Суббота — полный запрет
+    if weekday == 5:
+        send_message(f"\U0001F634 Суббота — новые сделки не открываю")
+        return False
+
+    # Воскресенье — только быстрые внутридневные (TP1 не дальше 1.5% от входа)
+    if weekday == 6 and signal is not None:
+        entry = signal.get("price", 0)
+        tp1 = signal.get("tps", [signal.get("tp", 0)])[0]
+        if entry > 0 and tp1 > 0:
+            tp1_dist = abs(tp1 - entry) / entry * 100
+            if tp1_dist > 1.5:
+                send_message(f"\U0001F634 Воскресенье — TP1 далеко ({tp1_dist:.1f}%), риск затянуть до понедельника, пропускаю")
+                return False
+
+    # Опасные окна ±15 мин вокруг открытия сессий (UTC)
+    if total_min >= 23*60+45 or total_min <= 15:
+        send_message(f"\u23F0 Открытие Токийской сессии — пропускаю вход (риск разворота)")
+        return False
+    if 7*60+45 <= total_min <= 8*60+15:
+        send_message(f"\u23F0 Открытие Лондонской сессии — пропускаю вход (риск разворота)")
+        return False
+    if 13*60+15 <= total_min <= 13*60+45:
+        send_message(f"\u23F0 Открытие Нью-Йоркской сессии — пропускаю вход (риск разворота)")
+        return False
+
+    return True
+
 
 def scan_market():
     log.info(f"=== SCAN START: {len(COINS)} coins ===")
@@ -121,6 +124,8 @@ def scan_market():
                     continue
                 if ai_reason:
                     send_message(f"\U0001F916 <b>ИИ проверил и одобрил вход</b> {symbol}\n\U0001F4AC {ai_reason}")
+                if not is_safe_to_trade(signal=signal):
+                    continue
                 pos = open_position(signal)
                 chart = draw_signal_chart(symbol, candles, signal)
                 related = [n for n in news if symbol.split("-")[0] in n.get("currencies",[])]
