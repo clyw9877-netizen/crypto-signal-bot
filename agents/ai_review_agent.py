@@ -19,6 +19,10 @@ import re
 import time
 
 import requests
+try:
+    from agents.news_agent import get_news_context as _get_news
+except Exception:
+    _get_news = lambda: "News agent unavailable."
 
 API_URL = "https://api.anthropic.com/v1/messages"
 MODEL = "claude-haiku-4-5-20251001"
@@ -125,6 +129,10 @@ def review_signal(signal):
 
     lessons = get_recent_lessons()
     lessons_text = "\n".join(f"- {l['lesson']}" for l in lessons) if lessons else "Уроков по этой монете ещё нет."
+    try:
+        news_text = _get_news()
+    except Exception:
+        news_text = "News unavailable."
 
     system = (
         "Ты — риск-аналитик у трейдингового бота, торгующего пробои уровней "
@@ -147,7 +155,11 @@ def review_signal(signal):
         f"Уверенность стратегии: {signal.get('confidence')}%\n"
         f"Причины входа: {signal.get('reasons')}\n\n"
         f"Прошлые уроки по этой монете:\n{lessons_text}\n\n"
-        "Оцени: логично ли входить именно так? Если по прошлым урокам видна "
+        f"Новостной фон:\n{news_text}\n\n"
+        "Оцени: логично ли входить именно так? Учти новостной фон — "
+        "при важных макро-данных (CPI, NFP, ФРС, ВВП) или крипто-панике "
+        "будь консервативнее: подтяни SL, уменьши TP или откажи. "
+        "Если по прошлым урокам видна "
         "повторяющаяся ошибка — учти её при решении. Ответь JSON."
     )
 
