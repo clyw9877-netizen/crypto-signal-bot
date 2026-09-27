@@ -52,6 +52,9 @@ def is_safe_to_trade(signal=None):
                 return False
 
     # Опасные окна ±15 мин вокруг открытия сессий (UTC)
+    if 21*60+45 <= total_min <= 22*60+15:
+        send_message(f"\u23F0 \u041e\u0442\u043a\u0440\u044b\u0442\u0438\u0435 \u0421\u0438\u0434\u043d\u0435\u0439\u0441\u043a\u043e\u0439 \u0441\u0435\u0441\u0441\u0438\u0438 \u2014 \u043f\u0440\u043e\u043f\u0443\u0441\u043a\u0430\u044e \u0432\u0445\u043e\u0434")
+        return False
     if total_min >= 23*60+45 or total_min <= 15:
         send_message(f"\u23F0 Открытие Токийской сессии — пропускаю вход (риск разворота)")
         return False
