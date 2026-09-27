@@ -21,6 +21,40 @@ SCHEDULE_UTC = {
     "pacific_evening": "05:00",
 }
 
+
+def is_safe_to_trade() -> bool:
+    """Проверяет можно ли сейчас открывать новые позиции по сессиям и выходным."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    weekday = now.weekday()  # 0=пн ... 5=сб, 6=вс
+    hour = now.hour
+    minute = now.minute
+    total_min = hour * 60 + minute
+
+    # Выходные
+    if weekday >= 5:
+        log.info(f"Weekend — skipping trade")
+        send_message(f"\U0001F634 Выходной ({['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][weekday]}), новые сделки не открываю")
+        return False
+
+    # Опасные окна ±15 мин вокруг открытия сессий (UTC)
+    # Токио 00:00, Лондон 08:00, Нью-Йорк 13:30
+    dangerous = False
+    session_name = ""
+    if total_min >= 23*60+45 or total_min <= 15:
+        dangerous, session_name = True, "Токийской"
+    elif 7*60+45 <= total_min <= 8*60+15:
+        dangerous, session_name = True, "Лондонской"
+    elif 13*60+15 <= total_min <= 13*60+45:
+        dangerous, session_name = True, "Нью-Йоркской"
+
+    if dangerous:
+        log.info(f"Dangerous session window: {session_name}")
+        send_message(f"\u23F0 Открытие {session_name} сессии — пропускаю вход (риск разворота)")
+        return False
+
+    return True
+
 def safe(fn, name, default=None):
     try:
         return fn()
