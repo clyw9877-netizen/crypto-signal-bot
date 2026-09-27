@@ -63,7 +63,8 @@ def check_positions(current_prices: Dict) -> List[Dict]:
         tps = pos.get("tps", [tp])
         tp_index = pos.get("tp_index", 0)
         hit_sl = current_price <= sl if direction == "long" else current_price >= sl
-        hit_tp = current_price >= tp if direction == "long" else current_price <= tp
+        # TP считается пробитым только если цена прошла уровень на 0.1% — защита от ложных касаний
+        hit_tp = current_price >= tp * 1.001 if direction == "long" else current_price <= tp * 0.999
         if hit_sl:
             close_price = sl
             pnl_pct = (close_price - pos["entry_price"]) / pos["entry_price"] if direction == "long" else (pos["entry_price"] - close_price) / pos["entry_price"]
