@@ -140,3 +140,10 @@ def format_evening_digest():
     else:
         lines.append("📰 Значимых новостей за день не было")
     return "\n".join(lines)
+
+
+def format_digest(kind="morning"):
+    """Алиас для совместимости — вызывается из chat_agent."""
+    if kind == "evening":
+        return format_evening_digest()
+    return format_morning_digest()
