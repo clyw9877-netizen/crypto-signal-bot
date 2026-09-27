@@ -1,300 +1,84 @@
+"""
+news_agent.py -- парсит макроэкономические и крипто-новости.
+Forex Factory (HIGH impact события), CryptoPanic (горячие крипто-новости).
+"""
 import requests
-from datetime import datetime, date
-from dateutil import parser as dateparser
-from typing import List, Dict
+from datetime import datetime, timezone, timedelta
 from bs4 import BeautifulSoup
-from agents.polymarket_agent import get_crypto_markets, format_polymarket_section
-from agents.translate import tr
-from agents.macro_agent import format_macro_section
-from agents.twitter_agent import get_failure_summary
 
-TIMEOUT = 6
-FF_URLS = [
-    "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
-    "https://cdn-nfs.faireconomy.media/ff_calendar_thisweek.json",
-]
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+_cache = {"ff": None, "ff_ts": 0, "cp": None, "cp_ts": 0}
+CACHE_TTL = 60 * 30
 
-CRYPTO_RELEVANT_CURRENCIES = {"USD"}
 
-EVENT_EXPLANATIONS = [
-    (["fomc", "interest rate", "fed funds rate", "rate decision"],
-     "Решение ФРС по ставке. Самое важное событие для всех рынков. Снижают ставку → деньги дешевлеют → обычно растёт крипта и акции. Повышают ставку → обычно падает рынок риска."),
-    (["cpi", "consumer price index", "inflation"],
-     "Инфляция в США. Если выше прогноза — рынок ждёт повышения ставки ФРС, крипта обычно падает. Если ниже — ожидают снижения ставок, крипта обычно растёт."),
-    (["non farm", "nonfarm", "employment", "unemployment", "jobless claims", "jolts", "payroll"],
-     "Данные по рынку труда США. Сильный рынок труда → ФРС держит ставки высокими → плохо для крипты. Слабый рынок труда → ждут снижения ставок → хорошо для крипты."),
-    (["gdp"],
-     "Валовой внутренний продукт США — показывает состояние экономики. Слабый рост может вызвать снижение ставок и рост крипты, сильный рост — наоборот."),
-    (["powell", "fed chair", "fomc statement", "press conference"],
-     "Выступление главы ФРС. Часто двигает рынок сильнее самих данных — трейдеры реагируют на тон речи. Не входи за 30 мин до и после."),
-    (["retail sales"],
-     "Розничные продажи США — показывает силу потребителя. Сильные данные могут усилить опасения по инфляции и давление на рисковые активы."),
-    (["consumer confidence", "consumer sentiment"],
-     "Индекс доверия потребителей США. Косвенно влияет на рынок через ожидания по расходам и инфляции."),
-    (["ppi", "producer price"],
-     "Индекс цен производителей США — опережающий индикатор инфляции. Влияет на ожидания по CPI и ставке ФРС."),
-]
-
-def _explain_event(title: str) -> str:
-    t = title.lower()
-    for keywords, explanation in EVENT_EXPLANATIONS:
-        if any(k in t for k in keywords):
-            return explanation
-    return ""
-
-def is_crypto_relevant(event: dict) -> bool:
-    if event.get("currency") not in CRYPTO_RELEVANT_CURRENCIES:
-        return False
-    title = event.get("title", "").lower()
-    relevant_keywords = ["fomc", "interest rate", "fed funds", "rate decision", "cpi", "inflation",
-                         "non farm", "nonfarm", "employment", "unemployment", "jobless", "jolts",
-                         "payroll", "gdp", "powell", "retail sales", "consumer confidence",
-                         "consumer sentiment", "ppi", "producer price"]
-    return any(k in title for k in relevant_keywords)
-
-def get_crypto_news() -> List[Dict]:
-    news = []
+def get_forex_factory_events():
+    now = datetime.now(timezone.utc).timestamp()
+    if _cache["ff"] is not None and now - _cache["ff_ts"] < CACHE_TTL:
+        return _cache["ff"]
     try:
-        r = requests.get("https://cryptopanic.com/api/v1/posts/", params={"auth_token":"free","public":"true","kind":"news","filter":"hot"}, timeout=TIMEOUT)
-        for item in r.json().get("results", [])[:10]:
-            news.append({
-                "title": item.get("title",""),
-                "source": item.get("source",{}).get("title",""),
-                "url": item.get("url",""),
-                "votes_positive": item.get("votes",{}).get("positive",0),
-                "currencies": [c["code"] for c in item.get("currencies",[])]
-            })
-    except Exception as e:
-        print("get_crypto_news (CryptoPanic) error:", e)
-    try:
-        news.extend(get_investing_news())
-    except Exception as e:
-        print("get_crypto_news (Investing) error:", e)
-    return news
-
-def get_investing_news() -> List[Dict]:
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"}
-    candidate_urls = [
-        "https://www.investing.com/rss/news_301.rss",
-        "https://www.investing.com/rss/news_285.rss",
-    ]
-    for url in candidate_urls:
-        try:
-            r = requests.get(url, headers=headers, timeout=TIMEOUT)
-            if r.status_code != 200:
-                continue
-            soup = BeautifulSoup(r.text, "html.parser")
-            items = soup.find_all("item")
-            if not items:
-                continue
-            news = []
-            for item in items[:10]:
-                title_tag = item.find("title")
-                link_tag = item.find("link")
-                if not title_tag:
-                    continue
-                news.append({
-                    "title": title_tag.get_text(strip=True),
-                    "source": "Investing.com",
-                    "url": link_tag.get_text(strip=True) if link_tag else "",
-                    "votes_positive": 0,
-                    "currencies": []
-                })
-            if news:
-                return news
-        except Exception as e:
-            print(f"get_investing_news error ({url}):", e)
-    return []
-
-def _parse_event_date(raw_date: str):
-    try:
-        return dateparser.parse(raw_date)
-    except Exception:
-        return None
-
-def get_forex_factory_events(target_date=None, crypto_only=True) -> List[Dict]:
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    raw = None
-    for url in FF_URLS:
-        try:
-            r = requests.get(url, timeout=TIMEOUT, headers=headers)
-            if r.status_code == 200 and r.text.strip().startswith("["):
-                raw = r.json()
-                break
-        except Exception as e:
-            print(f"FF fetch error {url}: {e}")
-    if raw is None:
-        return []
-    try:
-        target = target_date or date.today()
+        r = requests.get("https://www.forexfactory.com/calendar", headers=HEADERS, timeout=10)
+        soup = BeautifulSoup(r.text, "html.parser")
         events = []
-        for event in raw:
-            parsed = _parse_event_date(event.get("date", ""))
-            if parsed is None:
+        for row in soup.select("tr.calendar__row"):
+            impact = row.select_one(".calendar__impact span")
+            if not impact or not any("high" in c for c in impact.get("class", [])):
                 continue
-            if parsed.date() != target or event.get("impact","") not in ["High","Medium"]:
-                continue
-            ev = {
-                "time": event.get("time",""),
-                "currency": event.get("country",""),
-                "title": event.get("title",""),
-                "impact": event.get("impact",""),
-                "url": "https://www.forexfactory.com/calendar"
-            }
-            if crypto_only and not is_crypto_relevant(ev):
-                continue
-            ev["explanation"] = _explain_event(ev["title"])
-            events.append(ev)
-        return sorted(events, key=lambda x: x["time"])
+            time_el = row.select_one(".calendar__time")
+            title_el = row.select_one(".calendar__event-title")
+            currency_el = row.select_one(".calendar__currency")
+            events.append({
+                "time": time_el.text.strip() if time_el else "?",
+                "currency": currency_el.text.strip() if currency_el else "?",
+                "title": title_el.text.strip() if title_el else "?"
+            })
+        _cache["ff"] = events
+        _cache["ff_ts"] = now
+        return events
     except Exception as e:
-        print("FF parse error:", e)
+        print(f"ForexFactory error: {e}")
         return []
 
-def check_high_impact_now() -> bool:
+
+def get_crypto_news():
+    now = datetime.now(timezone.utc).timestamp()
+    if _cache["cp"] is not None and now - _cache["cp_ts"] < CACHE_TTL:
+        return _cache["cp"]
     try:
-        events = get_forex_factory_events(crypto_only=True)
-        now = datetime.now()
-        for event in events:
-            if event["impact"] != "High": continue
-            try:
-                event_time = datetime.strptime(str(date.today()) + " " + event["time"], "%Y-%m-%d %I:%M%p")
-                if abs((event_time - now).total_seconds() / 60) <= 30:
-                    return True
-            except:
+        url = "https://cryptopanic.com/api/v1/posts/?auth_token=public&filter=hot&public=true"
+        r = requests.get(url, timeout=10)
+        news = []
+        for item in r.json().get("results", [])[:10]:
+            votes = item.get("votes", {})
+            panic = votes.get("negative", 0)
+            positive = votes.get("positive", 0)
+            if panic < 3 and positive < 3:
                 continue
+            sentiment = "ПАНИКА" if panic > positive else "ПОЗИТИВ"
+            news.append(f"[{sentiment}] {item.get('title','')}")
+        _cache["cp"] = news
+        _cache["cp_ts"] = now
+        return news
     except Exception as e:
-        print("check_high_impact_now error:", e)
-    return False
-
-def get_fear_greed() -> Dict:
-    try:
-        r = requests.get("https://api.alternative.me/fng/?limit=1", timeout=TIMEOUT)
-        d = r.json()["data"][0]
-        return {"value": int(d["value"]), "classification": d["value_classification"]}
-    except Exception as e:
-        print("get_fear_greed error:", e)
-        return {"value": 50, "classification": "Neutral"}
-
-def get_btc_dominance() -> float:
-    try:
-        r = requests.get("https://api.coingecko.com/api/v3/global", timeout=TIMEOUT)
-        return r.json()["data"]["market_cap_percentage"]["btc"]
-    except Exception as e:
-        print("get_btc_dominance error:", e)
-        return 0.0
-
-CLASS_RU = {
-    "Extreme Fear": "Экстремальный страх",
-    "Fear": "Страх",
-    "Neutral": "Нейтрально",
-    "Greed": "Жадность",
-    "Extreme Greed": "Экстремальная жадность",
-}
-
-FNG_LABEL = [
-    (24, "😱 Крайний страх"),
-    (44, "😟 Страх"),
-    (55, "😐 Нейтрально"),
-    (74, "🤑 Жадность"),
-    (100, "🔥 Крайняя жадность"),
-]
+        print(f"CryptoPanic error: {e}")
+        return []
 
 
-def _bar(percent, width=10):
-    filled = max(0, min(width, int(round(percent / 100.0 * width))))
-    return "\u2588" * filled + "\u2591" * (width - filled)
-
-
-def _fng_label(value):
-    for limit, label in FNG_LABEL:
-        if value <= limit:
-            return label
-    return ""
-
-
-def format_digest(prices, events, news, title="Утренний дайджест", period_label="Сегодня") -> str:
-    fg = get_fear_greed()
-    btc = prices.get("BTC-USDT", 0)
-    eth = prices.get("ETH-USDT", 0)
-    sol = prices.get("SOL-USDT", 0)
-    fg_class_ru = CLASS_RU.get(fg["classification"], fg["classification"])
-
-    text = f"<b>{title}</b>\n"
-    text += f"<i>{datetime.now().strftime('%d.%m.%Y  %H:%M')}</i>\n\n"
-    text += "<b>💰 Курсы</b>\n"
-    text += f"<code>BTC</code>  <b>${btc:,.0f}</b>\n"
-    text += f"<code>ETH</code>  <b>${eth:,.2f}</b>\n"
-    text += f"<code>SOL</code>  <b>${sol:,.2f}</b>\n\n"
-    text += "<b>🎭 Индекс страха и жадности</b>\n"
-    text += f"<code>{_bar(fg['value'])}</code> <b>{fg['value']}</b> — {_fng_label(fg['value'])}\n\n"
-
-    if events:
-        text += f"<b>📅 Важные события ({period_label})</b>\n\n"
-        for e in events[:5]:
-            mark = "🔴" if e["impact"]=="High" else "🟡"
-            text += f'{mark} <b>{e["time"]}</b> — <b>{tr(e["title"])}</b>\n'
-            if e.get("explanation"):
-                text += f"<i>{e['explanation']}</i>\n"
-            text += "\n"
-        text += '<a href="https://www.forexfactory.com/calendar">🔗 Полный календарь событий</a>\n\n'
+def get_news_context():
+    lines = []
+    ff = get_forex_factory_events()
+    if ff:
+        lines.append("MACRO EVENTS TODAY (Forex Factory, HIGH impact):")
+        for e in ff[:5]:
+            lines.append(f"  {e['time']} UTC [{e['currency']}] {e['title']}")
+        lines.append("WARNING: High volatility possible around these times!")
     else:
-        text += "<b>📅 Календарь</b>\n<i>Важных событий по крипторынку сегодня нет</i>\n\n"
-
-    try:
-        macro_section = format_macro_section()
-        if macro_section:
-            text += macro_section
-    except Exception as e:
-        print("macro section error:", e)
-
-    try:
-        fail = get_failure_summary()
-        if fail:
-            text += f"⚠️ <i>Twitter: {fail['failed_count']}/{fail['total']} аккаунтов недоступны (зеркала не отвечают)</i>\n\n"
-    except Exception as e:
-        print("twitter failure summary error:", e)
-
-    poly_markets = []
-    try:
-        poly_markets = get_crypto_markets()
-    except Exception as e:
-        print("Polymarket fetch error in digest:", e)
-    poly_section = format_polymarket_section(poly_markets)
-    if poly_section:
-        text += poly_section
-
-    if news:
-        text += "<b>📰 Новости</b>\n\n"
-        for n in news[:4]:
-            link = n.get("url","")
-            title_n = tr(n["title"])[:120]
-            source = n.get("source","")
-            tail = f" <i>· {source}</i>" if source else ""
-            if link:
-                text += f'• <a href="{link}">{title_n}</a>{tail}\n'
-            else:
-                text += f"• {title_n}{tail}\n"
-        text += "\n"
-
-    text += "🤖 <i>Бот сканирует рынок каждые 5 минут</i>"
-    return text
-
-def format_morning_digest(prices, events, news) -> str:
-    return format_digest(prices, events, news, title="🌅 Утренний дайджест", period_label="сегодня")
-
-def format_evening_digest(prices, events, news) -> str:
-    return format_digest(prices, events, news, title="🌙 Вечерний итог", period_label="завтра")
-
-def format_signal_news(signal, related_news) -> str:
-    if not related_news: return ""
-    text = "\n<b>📰 Новостной контекст:</b>\n"
-    for n in related_news[:2]:
-        sentiment = "🟢 Позитив" if n.get("votes_positive",0) > 0 else "⚪ Нейтрально"
-        link = n.get("url","")
-        title_n = n["title"][:80]
-        text += f"{sentiment}: "
-        if link:
-            text += f'<a href="{link}">{title_n}</a>\n'
-        else:
-            text += f"{title_n}\n"
-    return text
+        lines.append("No major macro events today (Forex Factory).")
+    lines.append("")
+    cp = get_crypto_news()
+    if cp:
+        lines.append("CRYPTO NEWS (CryptoPanic hot):")
+        for n in cp[:5]:
+            lines.append(f"  {n}")
+    else:
+        lines.append("No hot crypto news.")
+    return "\n".join(lines)
