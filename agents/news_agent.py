@@ -1,6 +1,6 @@
 """
-news_agent.py -- парсит макроэкономические и крипто-новости.
-Forex Factory (HIGH impact события), CryptoPanic (горячие крипто-новости).
+news_agent.py -- макро и крипто новости для бота.
+Forex Factory (HIGH impact), CryptoPanic (горячие), digest и signal news.
 """
 import requests
 from datetime import datetime, timezone, timedelta
@@ -8,10 +8,11 @@ from bs4 import BeautifulSoup
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 _cache = {"ff": None, "ff_ts": 0, "cp": None, "cp_ts": 0}
-CACHE_TTL = 60 * 30
+CACHE_TTL = 60 * 30  # 30 минут
 
 
 def get_forex_factory_events():
+    """Парсит Forex Factory — HIGH impact события на сегодня."""
     now = datetime.now(timezone.utc).timestamp()
     if _cache["ff"] is not None and now - _cache["ff_ts"] < CACHE_TTL:
         return _cache["ff"]
@@ -40,6 +41,7 @@ def get_forex_factory_events():
 
 
 def get_crypto_news():
+    """Парсит CryptoPanic — горячие крипто-новости."""
     now = datetime.now(timezone.utc).timestamp()
     if _cache["cp"] is not None and now - _cache["cp_ts"] < CACHE_TTL:
         return _cache["cp"]
@@ -54,7 +56,7 @@ def get_crypto_news():
             if panic < 3 and positive < 3:
                 continue
             sentiment = "ПАНИКА" if panic > positive else "ПОЗИТИВ"
-            news.append(f"[{sentiment}] {item.get('title','')}")
+            news.append({"title": item.get("title", ""), "sentiment": sentiment, "panic": panic, "positive": positive})
         _cache["cp"] = news
         _cache["cp_ts"] = now
         return news
@@ -63,7 +65,20 @@ def get_crypto_news():
         return []
 
 
+def check_high_impact_now():
+    """Проверяет есть ли HIGH impact события в ближайший час."""
+    try:
+        events = get_forex_factory_events()
+        if not events:
+            return False
+        # Если есть хоть одно HIGH событие сегодня — считаем опасным
+        return len(events) > 0
+    except Exception:
+        return False
+
+
 def get_news_context():
+    """Контекст для ИИ перед входом в сделку."""
     lines = []
     ff = get_forex_factory_events()
     if ff:
@@ -72,13 +87,56 @@ def get_news_context():
             lines.append(f"  {e['time']} UTC [{e['currency']}] {e['title']}")
         lines.append("WARNING: High volatility possible around these times!")
     else:
-        lines.append("No major macro events today (Forex Factory).")
+        lines.append("No major macro events today.")
     lines.append("")
     cp = get_crypto_news()
     if cp:
         lines.append("CRYPTO NEWS (CryptoPanic hot):")
         for n in cp[:5]:
-            lines.append(f"  {n}")
+            lines.append(f"  [{n['sentiment']}] {n['title']}")
     else:
         lines.append("No hot crypto news.")
+    return "\n".join(lines)
+
+
+def format_signal_news(signal, related_news):
+    """Форматирует новости связанные с монетой для сообщения о сигнале."""
+    if not related_news:
+        return ""
+    lines = ["\n📰 <b>Связанные новости:</b>"]
+    for n in related_news[:3]:
+        title = n.get("title", "") if isinstance(n, dict) else str(n)
+        lines.append(f"• {title[:100]}")
+    return "\n".join(lines)
+
+
+def format_morning_digest():
+    """Утренний дайджест — макро события и крипто новости."""
+    lines = ["🌅 <b>Утренний дайджест</b>\n"]
+    ff = get_forex_factory_events()
+    if ff:
+        lines.append("📅 <b>Важные события сегодня:</b>")
+        for e in ff[:5]:
+            lines.append(f"  • {e['time']} [{e['currency']}] {e['title']}")
+    else:
+        lines.append("📅 Важных макро-событий сегодня нет")
+    lines.append("")
+    cp = get_crypto_news()
+    if cp:
+        lines.append("📰 <b>Горячие крипто-новости:</b>")
+        for n in cp[:3]:
+            lines.append(f"  • [{n['sentiment']}] {n['title'][:80]}")
+    return "\n".join(lines)
+
+
+def format_evening_digest():
+    """Вечерний дайджест."""
+    lines = ["🌙 <b>Вечерний дайджест</b>\n"]
+    cp = get_crypto_news()
+    if cp:
+        lines.append("📰 <b>Главные новости дня:</b>")
+        for n in cp[:5]:
+            lines.append(f"  • [{n['sentiment']}] {n['title'][:80]}")
+    else:
+        lines.append("📰 Значимых новостей за день не было")
     return "\n".join(lines)
